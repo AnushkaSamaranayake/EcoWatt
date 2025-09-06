@@ -3,6 +3,11 @@
 
 #include <Arduino.h>
 
+// API URLs and credentials
+extern const char* URL_READ;
+extern const char* URL_WRITE;
+extern const char* API_KEY;
+
 String buildReadFrame(uint16_t startReg, uint16_t quantity);
 String buildWriteSingleFrame(uint16_t reg, uint16_t value);
 
