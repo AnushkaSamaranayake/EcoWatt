@@ -23,24 +23,28 @@ void bufferPush(const Sample& s) {
   if (bufCount < BUFFER_SIZE) bufCount++;
 }
 
-
-
 void acquireOnce() {
-  uint16_t rawV = 0, rawI = 0;
-  bool okV = readRegisterU16(0x0000, 0x0001, rawV);
-  bool okI = readRegisterU16(0x0001, 0x0001, rawI);
+  std::vector<uint16_t> values;
+  if (readRegisterU16(0x0000, 0x0002, values, 3)) {
+    // Expecting 2 values: [Vac1, Iac1]
+    float voltage = values.size() > 0 ? values[0] / gainForRegister(0) : NAN;
+    float current = values.size() > 1 ? values[1] / gainForRegister(1) : NAN;
 
-  float voltage = okV ? rawV / gainForRegister(0) : NAN;
-  float current = okI ? rawI / gainForRegister(1) : NAN;
+    Sample s = { millis(), voltage, current };
+    bufferPush(s);
 
-  Sample s = { millis(), voltage, current };
-  bufferPush(s);
+    Serial.printf("Voltage=%.1fV, Current=%.1fA\n", voltage, current);
 
-  Serial.printf("Voltage=%.1fV, Current=%.1fA\n", voltage, current);
-
-  if (bufCount % 3 == 0) {
-    writeSingleRegister(0x0008, 50); // export power 50%
-    Serial.println("Export power set to 50%");
+    // Example: write every 3rd sample
+    if (bufCount % 3 == 0) {
+      if (writeSingleRegister(0x0008, 50, 3)) {
+        Serial.println("Export power set to 50%");
+      } else {
+        Serial.println("Failed to write export power");
+      }
+    }
+  } else {
+    Serial.println("Failed to read registers 0 and 1");
   }
 }
 
