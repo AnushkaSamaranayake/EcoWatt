@@ -14,12 +14,17 @@ String buildWriteSingleFrame(uint16_t reg, uint16_t value);
 // HTTP send
 bool httpPostFrame(const char* url, const String& hexFrame, String& outFrameHex);
 
-// Response helpers
+// Modbus error handling
 bool isModbusException(const String& hex);
 uint8_t modbusExceptionCode(const String& hex);
-bool decodeFirstRegister_U16(const String& hex, uint16_t& outVal);
+String modbusExceptionMessage(uint8_t code);
 
-bool readRegisterU16(uint16_t reg, uint16_t qty, uint16_t& firstVal);
-bool writeSingleRegister(uint16_t reg, uint16_t value);
+//Validation and decoding
+bool validateCRC(const String& hex);
+bool decodeRegisters_U16(const String& hex, std::vector<uint16_t>& outVals);
+
+// High-level read/write
+bool readRegisterU16(uint16_t reg, uint16_t qty, std::vector<uint16_t>& values, int retries=3);
+bool writeSingleRegister(uint16_t reg, uint16_t value, int retries=3);
 
 #endif
