@@ -30,6 +30,16 @@ String toHex2(uint8_t b) {
   return String(buf);
 }
 
+// Convert hex string to byte array
+bool hexToBytes(const String& hex, std::vector<uint8_t>& out) {
+  if (hex.length() % 2 !=0) return false;
+  out.clear();
+  for (size_t i = 0; i < hex.length(); i += 2) {
+    out.push_back(strtoul(hex.substring(i,i+2).c_str(), nullptr, 16));
+  }
+  return true;
+}
+
 // --- Build Frames ---
 String buildReadFrame(uint16_t startReg, uint16_t quantity) {
   uint8_t frame[8];
@@ -91,7 +101,22 @@ bool httpPostFrame(const char* url, const String& hexFrame, String& outFrameHex)
   return (outFrameHex.length() > 0);
 }
 
-// Helpers
+// ---- Error handling and Decoding ---
+String modbusExceptionMessage(uint8_t code) {
+  switch (code) {
+    case 0x01: return F("Illegal Function");
+    case 0x02: return F("Illegal Data Address");
+    case 0x03: return F("Illegal Data Value");
+    case 0x04: return F("Slave Device Failure");
+    case 0x05: return F("Acknowledge (processing delayed)");
+    case 0x06: return F("Slave Device Busy");
+    case 0x08: return F("Memory Parity Error");
+    case 0x0A: return F("Gateway Path Unavailable");
+    case 0x0B: return F("Gateway Target Failed to Respond");
+    default:   return F("Unknown Exception");
+  }
+}
+
 bool isModbusException(const String& hex) {
   if (hex.length() < 6) return false;
   uint8_t func = strtoul(hex.substring(2, 4).c_str(), nullptr, 16);
@@ -101,35 +126,90 @@ uint8_t modbusExceptionCode(const String& hex) {
   if (hex.length() < 6) return 0;
   return strtoul(hex.substring(4, 6).c_str(), nullptr, 16);
 }
-bool decodeFirstRegister_U16(const String& hex, uint16_t& outVal) {
-  if (hex.length() < 14) return false;
-  String hiLo = hex.substring(6, 10);
-  outVal = strtoul(hiLo.c_str(), nullptr, 16);
+
+//---- Validation -----
+bool validateCRC(const String& hex) {
+  std::vector<uint8_t> bytes;
+  if (!hexToBytes(hex, bytes) || bytes.size() < 4) return false;
+  uint16_t crcCalc = crc16_modbus(bytes.data(), bytes.size() - 2);
+  uint16_t crcRecv = bytes[bytes.size()-2] | (bytes[bytes.size()-1] << 8);
+  return (crcCalc == crcRecv);
+}
+
+// --- Decode ---
+bool decodeRegisters_U16(const String& hex, std::vector<uint16_t>& outVals) {
+  outVals.clear();
+  if (!validateCRC(hex)) {
+    Serial.println(F("Invalid CRC"));
+    return false;
+  }
+  std::vector<uint8_t> bytes;
+  hexToBytes(hex, bytes);
+  if (bytes.size() < 5) return false;
+
+  uint8_t byteCount = bytes[2];
+  if (bytes.size() < 3 + byteCount + 2) return false; // header + data + CRC
+
+  for (int i = 0; i< byteCount + 2; i++) {
+    uint16_t val = (bytes[3 + i] << 8) | bytes[4 + i];
+    outVals.push_back(val);
+  }
   return true;
 }
 
 
 // --- High-Level ---
-bool readRegisterU16(uint16_t reg, uint16_t qty, uint16_t& firstVal) {
+bool readRegisterU16(uint16_t reg, uint16_t qty, std::vector<uint16_t>& values, int retries) {
   String tx = buildReadFrame(reg, qty);
-  // 🔹 Print the frame we are sending
-  Serial.print(F("Read Frame -> "));
-  Serial.println(tx);
-  String rx;
+  Serial.print(F("Read Frame -> ")); Serial.println(tx);
 
-  // 🔹 Print the frame we received
+  for (int attempt = 1; attempt <= retries; attempt++) {
+    String rx;
+    if (!httpPostFrame(URL_READ, tx, rx)) {
+      Serial.printf("HTTP error (attempt %d/%d)\n", attempt, retries);
+      delay(200);
+      continue;
+    }
 
-  if (!httpPostFrame(URL_READ, tx, rx)) return false;
-  if (isModbusException(rx)) return false;
-  Serial.print(F("Read Resp  <- "));
-  Serial.println(rx);
-  return decodeFirstRegister_U16(rx, firstVal);
+    if (isModbusException(rx)) {
+      uint8_t code = modbusExceptionCode(rx);
+      Serial.print(F("Modbus Exception: "));
+      Serial.println(modbusExceptionMessage(code));
+      return false;
+    }
+
+    if (decodeRegisters_U16(rx, values)) {
+      Serial.print(F("Read Resp  <- ")); Serial.println(rx);
+      return true;
+    }
+
+    Serial.printf("Decode/CRC error (attempt %d/%d)\n", attempt, retries);
+    delay(200);
+  }
+  return false;
 }
 
-bool writeSingleRegister(uint16_t reg, uint16_t value) {
+bool writeSingleRegister(uint16_t reg, uint16_t value, int retries) {
   String tx = buildWriteSingleFrame(reg, value);
-  String rx;
-  if (!httpPostFrame(URL_WRITE, tx, rx)) return false;
-  if (isModbusException(rx)) return false;
-  return true;
+  for (int attempt = 1; attempt <= retries; attempt++) {
+    String rx;
+    if (!httpPostFrame(URL_WRITE, tx, rx)) {
+      Serial.printf("HTTP error (attempt %d/%d)\n", attempt, retries);
+      delay(200);
+      continue;
+    }
+    if (isModbusException(rx)) {
+      uint8_t code = modbusExceptionCode(rx);
+      Serial.print(F("Modbus Exception: "));
+      Serial.println(modbusExceptionMessage(code));
+      return false;
+    }
+    if (validateCRC(rx)) {
+      Serial.print(F("Write Resp <- ")); Serial.println(rx);
+      return true;
+    }
+    Serial.printf("CRC error (attempt %d/%d)\n", attempt, retries);
+    delay(200);
+  }
+  return false;
 }
