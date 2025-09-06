@@ -2,10 +2,10 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 
-// Cloud API URLs
-const char* URL_READ  = "http://20.15.114.131:8080/api/inverter/read";
-const char* URL_WRITE = "http://20.15.114.131:8080/api/inverter/write";
-const char* API_KEY   = "NjhhZWIwNDU1ZDdmMzg3MzNiMTQ5YTIwOjY4YWViMDQ1NWQ3ZjM4NzMzYjE0OWExNg==";
+// Config (defined in main)
+extern const char* URL_READ;
+extern const char* URL_WRITE;
+extern const char* API_KEY;
 
 // Slave ID
 const uint8_t SLAVE_ID = 0x11;
