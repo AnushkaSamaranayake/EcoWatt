@@ -41,6 +41,7 @@ bool hexToBytes(const String& hex, std::vector<uint8_t>& out) {
 }
 
 // --- Build Frames ---
+// [SlaveID][Func][StartHi][StartLo][QtyHi][QtyLo][CRCLo][CRCHi]
 String buildReadFrame(uint16_t startReg, uint16_t quantity) {
   uint8_t frame[8];
   frame[0] = SLAVE_ID; frame[1] = 0x03;
@@ -57,6 +58,7 @@ String buildReadFrame(uint16_t startReg, uint16_t quantity) {
   return hex;
 }
 
+// [SlaveID][Func][RegHi][RegLo][ValueHi][ValueLo][CRCLo][CRCHi]
 String buildWriteSingleFrame(uint16_t reg, uint16_t value) {
   uint8_t frame[8];
   frame[0] = SLAVE_ID; frame[1] = 0x06;
