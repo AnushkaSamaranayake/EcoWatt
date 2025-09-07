@@ -59,7 +59,11 @@ cd Milestone_2
 #upload the code to the NodeMCU and run
 ```
 
-Now you can see the outputs from the serial monitor of the NodeMCU
+Now you can see the outputs from the serial monitor of the NodeMCU.
+
+Following is the demo video and the protocol documentation
+[Demo video](https://drive.google.com/file/d/1DyZgW_ta5l4TNoQSV3jk2fRqGFYG0y4W/view?usp=drive_link)
+[Protocol Documentation](https://drive.google.com/file/d/13PiZtXgCqF5jm97-vKCKLQgPyyPpnMID/view?usp=drive_link)
 
 ## Milestone 3
 
