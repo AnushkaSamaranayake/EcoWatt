@@ -152,7 +152,7 @@ bool decodeRegisters_U16(const String& hex, std::vector<uint16_t>& outVals) {
   uint8_t byteCount = bytes[2];
   if (bytes.size() < 3 + byteCount + 2) return false; // header + data + CRC
 
-  for (int i = 0; i< byteCount + 2; i++) {
+  for (int i = 0; i< byteCount; i++) {
     uint16_t val = (bytes[3 + i] << 8) | bytes[4 + i];
     outVals.push_back(val);
   }
