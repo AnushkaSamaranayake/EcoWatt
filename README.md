@@ -17,7 +17,7 @@ This project consists of 4 main milestones.
 
 In Milestone 1, we built a PetriNet diagram to identify the architecture of the EcoWatt device and how it works. Then based on that diagram, a scaffold code is created to simulate the functionality of the device. Following are the Petrinet diagram and the demo video of the scaffold code.
 
-[PeteriNet diagram](https://drive.google.com/file/d/15ALogLgaHMUhQ6W8kmQFQu1SFCyAevvc/view?usp=drive_link)\n
+[PeteriNet diagram](https://drive.google.com/file/d/15ALogLgaHMUhQ6W8kmQFQu1SFCyAevvc/view?usp=drive_link)
 [Demo video](https://drive.google.com/file/d/1hROSwhe20sWfY8Vbdq4S5FbaViUpt6ox/view) 
 
 To see how it works, follow the following commands
@@ -61,9 +61,9 @@ cd Milestone_2
 
 Now you can see the outputs from the serial monitor of the NodeMCU.
 
-Following is the demo video and the protocol documentation\n
+Following is the demo video and the protocol documentation
 
-[Demo video](https://drive.google.com/file/d/1DyZgW_ta5l4TNoQSV3jk2fRqGFYG0y4W/view?usp=drive_link)\n
+[Demo video](https://drive.google.com/file/d/1DyZgW_ta5l4TNoQSV3jk2fRqGFYG0y4W/view?usp=drive_link)
 [Protocol Documentation](https://drive.google.com/file/d/13PiZtXgCqF5jm97-vKCKLQgPyyPpnMID/view?usp=drive_link)
 
 ## Milestone 3
