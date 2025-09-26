@@ -8,13 +8,6 @@
         "env": []
     },
     {
-        "id": "flow1",
-        "type": "tab",
-        "label": "EcoWatt Cloud",
-        "disabled": false,
-        "info": ""
-    },
-    {
         "id": "f557946168782514",
         "type": "http in",
         "z": "6020ea8d49b51808",
@@ -28,24 +21,9 @@
         "y": 520,
         "wires": [
             [
-                "98aa2bc0cc14bd96"
-            ]
-        ]
-    },
-    {
-        "id": "98aa2bc0cc14bd96",
-        "type": "json",
-        "z": "6020ea8d49b51808",
-        "name": "",
-        "property": "payload",
-        "action": "",
-        "pretty": false,
-        "x": 370,
-        "y": 520,
-        "wires": [
-            [
-                "02d5167ba2f1685a",
-                "027a10f451887250"
+                "027a10f451887250",
+                "375a747e5ea3b5b7",
+                "02d5167ba2f1685a"
             ]
         ]
     },
@@ -54,38 +32,33 @@
         "type": "function",
         "z": "6020ea8d49b51808",
         "name": "function 3",
-        "func": "// --- 1. Parse & validate ---\nlet body = msg.payload;\n\nif (typeof body === \"string\") {\n    try {\n        body = JSON.parse(body);\n    } catch (err) {\n        msg.statusCode = 400;\n        msg.payload = { error: \"Invalid JSON\" };\n        return msg;\n    }\n}\n\nif (!body.device_id || !body.timestamp || !body.payload) {\n    msg.statusCode = 400;\n    msg.payload = { error: \"device_id, timestamp, and payload are required\" };\n    return msg;\n}\n\nconst pay = body.payload;\nconst compression = (pay.compression || \"none\").toLowerCase();\nconst base = pay.base || 0;\nconst input = pay.samples || [];\n\n// --- 2. Decompression for verification ---\nfunction fromDelta(base, deltas){\n  let out = [];\n  let prev = base;\n  for (const d of deltas){ prev += d; out.push(prev); }\n  return out;\n}\n\nfunction fromRLE(pairs){\n  let out = [];\n  for (const [val, count] of pairs){\n    for (let i=0; i<count; i++) out.push(val);\n  }\n  return out;\n}\n\nlet samplesDecompressed;\nif (compression === \"delta\") samplesDecompressed = fromDelta(base, input);\nelse if (compression === \"rle\") samplesDecompressed = fromRLE(input);\nelse samplesDecompressed = input;\n\n// --- 3. Benchmark metrics ---\nconst compBytes = Buffer.byteLength(JSON.stringify(pay), \"utf8\");\nconst bitDepth = pay.sample_bits || 16; // assume 16-bit raw samples\nconst origBytes = (samplesDecompressed.length * bitDepth) / 8;\nconst ratio = compBytes > 0 ? (origBytes / compBytes) : null;\n\n// --- 4. Save to Node-RED flow context (simple history buffer) ---\nlet history = flow.get(\"history\") || [];\nhistory.push({\n  device_id: body.device_id,\n  timestamp: body.timestamp,\n  compression,\n  original_bytes: origBytes,\n  compressed_bytes: compBytes,\n  compression_ratio: ratio,\n  samples_count: samplesDecompressed.length,\n  agg: pay.agg || null\n});\nif (history.length > 200) history = history.slice(-200);\nflow.set(\"history\", history);\n\n// --- 5. Reply with ACK ---\nmsg.payload = {\n  status: \"OK\",\n  next_upload_after_s: pay.upload_window_s || 15,\n  commands: [], // placeholder for Milestone 4\n  metrics: {\n    samples_count: samplesDecompressed.length,\n    original_bytes: origBytes,\n    compressed_bytes: compBytes,\n    compression_ratio: ratio\n  }\n};\n\nreturn msg;\n\n\n",
+        "func": "let voltages = msg.payload.voltage || [];\nlet currents = msg.payload.current || [];\n\nfunction mean(arr) {\n    return arr.reduce((a, b) => a + b, 0)*10 / (arr.length || 1);\n}\nfunction max(arr) {\n    return arr.length > 0 ? Math.max(...arr)*10 : null;\n}\nfunction min(arr) {\n    return arr.length > 0 ? Math.min(...arr)*10 : null;\n}\n\n// --- stats for dashboard ---\nmsg.payload = {\n    voltage: { max: max(voltages), min: min(voltages), mean: mean(voltages) },\n    current: { max: max(currents), min: min(currents), mean: mean(currents) }\n};\n\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 520,
-        "y": 520,
+        "x": 580,
+        "y": 700,
         "wires": [
             [
-                "cfe19fd96414c1b5"
+                "4812131e18e0d539",
+                "5d82228cb99d77ed",
+                "a0c413fb8a83d8de",
+                "07856203ba79315f",
+                "ddfc543d8d50da41",
+                "691ef451d913d20b",
+                "98b80de2e35eed5a"
             ]
         ]
-    },
-    {
-        "id": "cfe19fd96414c1b5",
-        "type": "http response",
-        "z": "6020ea8d49b51808",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 730,
-        "y": 520,
-        "wires": []
     },
     {
         "id": "027a10f451887250",
         "type": "debug",
         "z": "6020ea8d49b51808",
         "name": "debug 1",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -93,8 +66,8 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 520,
-        "y": 660,
+        "x": 540,
+        "y": 420,
         "wires": []
     },
     {
@@ -108,7 +81,7 @@
         "skipBodyParsing": false,
         "swaggerDoc": "",
         "x": 200,
-        "y": 840,
+        "y": 920,
         "wires": [
             [
                 "875cedfa6d5853b4"
@@ -128,7 +101,7 @@
         "finalize": "",
         "libs": [],
         "x": 420,
-        "y": 840,
+        "y": 920,
         "wires": [
             [
                 "96c4eeec3d7d4cb3"
@@ -143,67 +116,541 @@
         "statusCode": "",
         "headers": {},
         "x": 570,
-        "y": 840,
+        "y": 920,
         "wires": []
     },
     {
-        "id": "http_in_upload",
-        "type": "http in",
-        "z": "flow1",
-        "name": "POST /api/v1/upload",
-        "url": "/api/v1/upload",
-        "method": "post",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 160,
-        "y": 120,
-        "wires": [
-            [
-                "json_parse"
-            ]
-        ]
+        "id": "3e01c3c681aa1f6a",
+        "type": "ui_gauge",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "1bb0f9a52225c2ae",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "gauge",
+        "label": "units",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "250",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 1070,
+        "y": 600,
+        "wires": []
     },
     {
-        "id": "json_parse",
-        "type": "json",
-        "z": "flow1",
-        "name": "Parse JSON",
-        "property": "payload",
-        "action": "obj",
-        "pretty": false,
-        "x": 360,
-        "y": 120,
-        "wires": [
-            [
-                "function_ack"
-            ]
-        ]
+        "id": "e29a28585e9b36c9",
+        "type": "ui_gauge",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "3f4020bd0d6932c7",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "gauge",
+        "label": "units",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "250",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 1070,
+        "y": 640,
+        "wires": []
     },
     {
-        "id": "function_ack",
-        "type": "function",
-        "z": "flow1",
-        "name": "Save + Reply",
-        "func": "const fs = require('fs');\nconst path = './data/uplink.log';\n\n// append payload to file\nfs.appendFileSync(path, JSON.stringify(msg.payload) + '\\n');\n\n// reply back\nmsg.payload = { status: 'OK', commands: [] };\nreturn msg;",
+        "id": "ec88a6d496a7e5f1",
+        "type": "ui_gauge",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "6006c4ec47b4ce74",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "gauge",
+        "label": "units",
+        "format": "{{value}}",
+        "min": 0,
+        "max": 10,
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 1070,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "020de9314c47edc1",
+        "type": "ui_gauge",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "a43394b436c8eed5",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "gauge",
+        "label": "units",
+        "format": "{{value}}",
+        "min": 0,
+        "max": 10,
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "diff": false,
+        "className": "",
+        "x": 1070,
+        "y": 740,
+        "wires": []
+    },
+    {
+        "id": "d382a2c4b1bbdabd",
+        "type": "ui_chart",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "cbb48b31e004fb1c",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "label": "chart",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "",
+        "ymax": "",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
         "outputs": 1,
-        "noerr": 0,
-        "x": 560,
-        "y": 120,
+        "useDifferentColor": false,
+        "className": "",
+        "x": 1070,
+        "y": 800,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "98023a47d1851bcc",
+        "type": "ui_chart",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "group": "013f74de9b0111fa",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "label": "chart",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "",
+        "ymax": "",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "className": "",
+        "x": 1070,
+        "y": 840,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "4812131e18e0d539",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.voltage.max",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 600,
         "wires": [
             [
-                "http_response"
+                "3e01c3c681aa1f6a",
+                "b4ee7a5f10751135"
             ]
         ]
     },
     {
-        "id": "http_response",
+        "id": "5d82228cb99d77ed",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.voltage.min",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 640,
+        "wires": [
+            [
+                "e29a28585e9b36c9"
+            ]
+        ]
+    },
+    {
+        "id": "a0c413fb8a83d8de",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.current.max",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 700,
+        "wires": [
+            [
+                "ec88a6d496a7e5f1"
+            ]
+        ]
+    },
+    {
+        "id": "07856203ba79315f",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.current.min",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 740,
+        "wires": [
+            [
+                "020de9314c47edc1"
+            ]
+        ]
+    },
+    {
+        "id": "ddfc543d8d50da41",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.voltage.mean",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 800,
+        "wires": [
+            [
+                "d382a2c4b1bbdabd"
+            ]
+        ]
+    },
+    {
+        "id": "691ef451d913d20b",
+        "type": "change",
+        "z": "6020ea8d49b51808",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.current.mean",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 840,
+        "wires": [
+            [
+                "98023a47d1851bcc"
+            ]
+        ]
+    },
+    {
+        "id": "375a747e5ea3b5b7",
+        "type": "function",
+        "z": "6020ea8d49b51808",
+        "name": "function 2",
+        "func": "node.log(\"Received data: \" + JSON.stringify(msg.payload));\n\n// --- response for Flask ---\nlet httpReply = {\n    payload: { status: \"OK\", received: true }\n};\n\n\nreturn httpReply;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 580,
+        "y": 520,
+        "wires": [
+            [
+                "f9295683e2c8786c",
+                "5839f661796d5431"
+            ]
+        ]
+    },
+    {
+        "id": "f9295683e2c8786c",
         "type": "http response",
-        "z": "flow1",
-        "name": "Send ACK",
+        "z": "6020ea8d49b51808",
+        "name": "",
         "statusCode": "",
         "headers": {},
-        "x": 780,
-        "y": 120,
+        "x": 750,
+        "y": 460,
         "wires": []
+    },
+    {
+        "id": "b4ee7a5f10751135",
+        "type": "debug",
+        "z": "6020ea8d49b51808",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 980,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "98b80de2e35eed5a",
+        "type": "debug",
+        "z": "6020ea8d49b51808",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 780,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "5839f661796d5431",
+        "type": "debug",
+        "z": "6020ea8d49b51808",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 780,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "1bb0f9a52225c2ae",
+        "type": "ui_group",
+        "name": "Max Voltage",
+        "tab": "05203b57cf5d70f4",
+        "order": 1,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "3f4020bd0d6932c7",
+        "type": "ui_group",
+        "name": "Min Voltage",
+        "tab": "05203b57cf5d70f4",
+        "order": 2,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "6006c4ec47b4ce74",
+        "type": "ui_group",
+        "name": "Max Current",
+        "tab": "327206049d8a8762",
+        "order": 1,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "a43394b436c8eed5",
+        "type": "ui_group",
+        "name": "Min Current",
+        "tab": "327206049d8a8762",
+        "order": 2,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "cbb48b31e004fb1c",
+        "type": "ui_group",
+        "name": "Mean Voltage",
+        "tab": "05203b57cf5d70f4",
+        "order": 3,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "013f74de9b0111fa",
+        "type": "ui_group",
+        "name": "Mean Current",
+        "tab": "327206049d8a8762",
+        "order": 3,
+        "disp": true,
+        "width": 6,
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "05203b57cf5d70f4",
+        "type": "ui_tab",
+        "name": "Voltages",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "327206049d8a8762",
+        "type": "ui_tab",
+        "name": "Currents",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "173854da298dcefb",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-dashboard": "3.6.6"
+        }
     }
 ]
