@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, json, request, jsonify
 import requests
 import os
 from dotenv import load_dotenv
@@ -8,8 +8,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-NODERED_URL_SEND_DATA = "http://127.0.0.1:1880/api/v1/upload"
-NODERED_URL_GET_DATA = "http://127.0.0.1:1880/api/v1/history/:device_id"
+NODERED_URL_SEND_DATA = "http://192.168.8.102:1880/api/v1/upload"
+NODERED_URL_GET_DATA = "http://192.168.8.102:1880/api/v1/history/:device_id"
 
 API_KEYS = {
     "EcoWatt001" : os.getenv("API_KEY_1"),
@@ -18,7 +18,11 @@ API_KEYS = {
     "EcoWatt004" : os.getenv("API_KEY_4"),
     "EcoWatt005" : os.getenv("API_KEY_5"),
     }
+
     
+@app.route("/")
+def index():
+    return "EcoWatt API Service is running"
 
 @app.route("/api/ecowatt/cloud/upload", methods=["POST"])
 def uploadData():
@@ -39,11 +43,46 @@ def uploadData():
 
     #get json data
     data = request.json
-    if not data:
+    
+    #print json dump with indent 4
+    print(json.dumps(data, indent=4))
+
+    #extract relevant fields for Node-Red
+
+    device_id = data.get("device_id")
+    interval_start = data.get("interval_start")
+    voltage = data.get("voltage")
+    current = data.get("current")
+
+    print(type(voltage))
+    print(type(current))
+
+    # for i in range(len(voltage)):
+    #     voltage += voltage[i]
+    
+    # voltage_avg = voltage / len(voltage)
+
+    # for i in range(len(current)):
+    #     current += current[i]
+
+    # current_avg = current / len(current)
+
+    data_node_red = {
+        "device_id":device_id,
+        "timestamp":interval_start,
+        "voltage":voltage,
+        "current":current
+    }
+
+    print("Data to be sent to Node-Red:")
+    print(json.dumps(data_node_red, indent=4))
+
+    if not data_node_red:
         return jsonify({"error": "No data provided"}), 400
     
     try:
-        response = requests.post(NODERED_URL_SEND_DATA, json=data)
+        print("sending data to Node-Red...")
+        response = requests.post(NODERED_URL_SEND_DATA, json=data_node_red)
         response.raise_for_status()
         return jsonify({
             "message": "Data uploaded successfully",
@@ -51,6 +90,7 @@ def uploadData():
         }), response.status_code
     
     except requests.exceptions.RequestException as e:
+        print(f"Error sending data to Node-Red: {e}")
         return jsonify({"error": str(e)}), 500
 
 
