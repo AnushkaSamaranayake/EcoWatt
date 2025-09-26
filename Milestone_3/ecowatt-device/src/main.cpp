@@ -5,15 +5,16 @@
 #include "buffer.h"
 #include "packetizer.h"
 
-const char* WIFI_SSID     = "OPPO_A3s";
-const char* WIFI_PASSWORD = "12345678";
+const char* WIFI_SSID     = "Anushka_4G";
+const char* WIFI_PASSWORD = "Mass@210559H";
 
 // Cloud API URLs
 const char* URL_READ  = "http://20.15.114.131:8080/api/inverter/read";
 const char* URL_WRITE = "http://20.15.114.131:8080/api/inverter/write";
 const char* API_KEY   = "NjhhZWIwNDU1ZDdmMzg3MzNiMTQ5YTIwOjY4YWViMDQ1NWQ3ZjM4NzMzYjE0OWExNg==";
-const char* URL_UPLOAD = "http://127.0.0.1:1880/api/v1/upload"; 
-const char* API_KEY_1   = "aa1c38aaa59b94ff2339060e298826e2";
+const char* URL_UPLOAD = "http://192.168.8.102:5000/api/ecowatt/cloud/upload";
+const char* DEVICE_ID = "EcoWatt001";
+const char* API_KEY_EW   = "EcowattUploadsMzo11quhRx40l6eqLV22BWvQ5ozk6iolLO60GaOa1j2R7tthoSiKHlpROjT5nW2179vkSeJoMQsjZWjLDLgVOIVM86SlaRki0cgWqep9QRHYlbqsPC";
 
 
 void connectWiFi() {
