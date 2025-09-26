@@ -6,7 +6,9 @@
 #include <base64.h> // if using base64 lib; otherwise implement simple base64
 
 extern const char* URL_UPLOAD; // define in main
-extern const char* API_KEY_1;
+extern const char* API_KEY_EW;
+extern const char* DEVICE_ID;
+
 
 bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms, uint8_t* workbuf, size_t workcap){
   size_t cnt = buffer_count();
@@ -44,7 +46,25 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   body += ",\"sample_count\":"; body += String(out_n);
   body += ",\"payload_format\":\"DELTA_RLE_v1\"";
   body += ",\"payload\":\""; body += base64payload; body += "\"";
-  body += ",\"aggregates\":{\"min_v\":"; body += String(minV/10.0); body += ",\"avg_v\":"; body += String(avgV/10.0); body += ",\"max_v\":"; body += String(maxV/10.0); body += "}";
+  // body += ",\"aggregates\":{\"min_v\":"; body += String(minV/10.0); body += ",\"avg_v\":"; body += String(avgV/10.0); body += ",\"max_v\":"; body += String(maxV/10.0); body += "}";
+  // body += "}";
+
+  // add raw voltage
+  body += ",\"voltage\":[";
+  for (size_t i=0; i<out_n; i++){
+    body += String(samples[i].voltage/10.0);
+    if (i <out_n-1) body += ",";
+  }
+  body += "]";
+
+  // add raw current array
+  body += ",\"current\":[";
+  for (size_t i=0; i<out_n; i++){
+    body += String(samples[i].current/10.0);
+    if (i <out_n-1) body += ",";
+  }
+  body += "]";
+
   body += "}";
 
     // --- Debug print before sending ---
@@ -59,6 +79,8 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
     return false; 
   }
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-id", device_id);
+  http.addHeader("x-api-key", API_KEY_EW);
   
   // Removed Authorization header since API key is not needed
 
