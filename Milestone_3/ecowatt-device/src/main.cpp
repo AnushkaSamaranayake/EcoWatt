@@ -12,7 +12,7 @@ const char* WIFI_PASSWORD = "Mass@210559H";
 const char* URL_READ  = "http://20.15.114.131:8080/api/inverter/read";
 const char* URL_WRITE = "http://20.15.114.131:8080/api/inverter/write";
 const char* API_KEY   = "NjhhZWIwNDU1ZDdmMzg3MzNiMTQ5YTIwOjY4YWViMDQ1NWQ3ZjM4NzMzYjE0OWExNg==";
-const char* URL_UPLOAD = "http://192.168.8.102:5000/api/ecowatt/cloud/upload";
+const char* URL_UPLOAD = "http://192.168.8.100:5000/api/ecowatt/cloud/upload";
 const char* DEVICE_ID = "EcoWatt001";
 const char* API_KEY_EW   = "EcowattUploadsMzo11quhRx40l6eqLV22BWvQ5ozk6iolLO60GaOa1j2R7tthoSiKHlpROjT5nW2179vkSeJoMQsjZWjLDLgVOIVM86SlaRki0cgWqep9QRHYlbqsPC";
 
