@@ -8,8 +8,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-NODERED_URL_SEND_DATA = "http://192.168.8.102:1880/api/v1/upload"
-NODERED_URL_GET_DATA = "http://192.168.8.102:1880/api/v1/history/:device_id"
+NODERED_URL_SEND_DATA = "http://192.168.8.100:1880/api/v1/upload"
+NODERED_URL_GET_DATA = "http://192.168.8.100:1880/api/v1/history/:device_id"
 
 API_KEYS = {
     "EcoWatt001" : os.getenv("API_KEY_1"),
