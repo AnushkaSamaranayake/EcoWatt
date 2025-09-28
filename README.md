@@ -101,3 +101,8 @@ In Milestone 3, the Ecowatt device will send the data to the cloud server. Befor
 8. Now you can connect the ESP Node MCU to the computer and then you can see the updated Node-RED Dashboard.
 
 ** Note: when the wifi router is changed, always check the IP address and do the relevent changes.
+
+Following is the demo video and the protocol documentation
+
+[Demo video](https://drive.google.com/file/d/1DyZgW_ta5l4TNoQSV3jk2fRqGFYG0y4W/view?usp=drive_link)
+[Protocol Documentation](https://drive.google.com/file/d/13PiZtXgCqF5jm97-vKCKLQgPyyPpnMID/view?usp=drive_link)
