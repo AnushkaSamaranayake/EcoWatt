@@ -2,14 +2,15 @@
 #include "protocol_adapter.h"
 #include "buffer.h"
 #include "packetizer.h"
-
+#include "config.h"
+#include <Arduino.h>
 
 
 unsigned long lastPoll = 0;
 unsigned long lastUpload=0;
 unsigned long POLL_INTERVAL_MS = 1000;
 unsigned long UPLOAD_INTERVAL_MS = 15000; // demo 15s instead of 15min
-extern const char* DEVICE_ID;
+const char* DEVICE_ID = "node123";
 
 float gainForRegister(uint16_t reg) {
   switch (reg) {
@@ -24,8 +25,10 @@ float gainForRegister(uint16_t reg) {
 
 
 void acquireOnce() {
+  AppConfig cfg = config_get_active();
+  unsigned long poll_ms = cfg.sampling_interval_s * 1000UL;
   unsigned long now = millis();
-  if (now - lastPoll >= POLL_INTERVAL_MS) {
+  if (now - lastPoll >= poll_ms) {
     lastPoll = now;
     uint16_t rawV = 0, rawI = 0;
     bool okV = readRegisterU16(0x0000, 0x0001, rawV);
@@ -40,7 +43,8 @@ void acquireOnce() {
     else Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n", voltage, current, buffer_count());
   }
 
-  if (now - lastUpload >= UPLOAD_INTERVAL_MS){
+  unsigned long up_ms = cfg.upload_interval_s * 1000UL;
+  if (now - lastUpload >= up_ms){
     lastUpload = now;
     uint8_t workbuf[2048];
     bool ok = finalize_and_upload(DEVICE_ID, (unsigned long)(lastUpload), workbuf, sizeof(workbuf));
@@ -56,6 +60,8 @@ void acquireOnce() {
 
 void schedulerLoop() {
 
-    acquireOnce();
+
+  config_apply_staged();
+  acquireOnce();
   
 }

@@ -3,12 +3,13 @@
 #include "compressor.h"
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "security.h"
+#include <ArduinoJson.h>
+
 #include <base64.h> // if using base64 lib; otherwise implement simple base64
 
 extern const char* URL_UPLOAD; // define in main
-extern const char* API_KEY_EW;
-extern const char* DEVICE_ID;
-
+extern const char* DEVICE_PSK;
 
 bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms, uint8_t* workbuf, size_t workcap){
   size_t cnt = buffer_count();
@@ -46,8 +47,7 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   body += ",\"sample_count\":"; body += String(out_n);
   body += ",\"payload_format\":\"DELTA_RLE_v1\"";
   body += ",\"payload\":\""; body += base64payload; body += "\"";
-  // body += ",\"aggregates\":{\"min_v\":"; body += String(minV/10.0); body += ",\"avg_v\":"; body += String(avgV/10.0); body += ",\"max_v\":"; body += String(maxV/10.0); body += "}";
-  // body += "}";
+
 
   // add raw voltage
   body += ",\"voltage\":[";
@@ -71,29 +71,32 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   Serial.println("[UPLOAD] Posting JSON:");
   Serial.println(body);
 
-  // HTTP POST
+  // secure envelope
+  uint32_t nonce = nonce_load() + 1;
+  String mac = compute_hmac_hex((const uint8_t*)DEVICE_PSK, strlen(DEVICE_PSK),
+                               (const uint8_t*)body.c_str(), body.length());
+  String envelope = build_envelope_json(nonce, body, mac);
+
   WiFiClient client;
   HTTPClient http;
-  if (!http.begin(client, URL_UPLOAD)) { 
-    free(samples); 
-    return false; 
-  }
+  if (!http.begin(client, URL_UPLOAD)) { free(samples); return false; }
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("x-device-id", device_id);
-  http.addHeader("x-api-key", API_KEY_EW);
-  
-  // Removed Authorization header since API key is not needed
-
-  int code = http.POST(body);
+  int code = http.POST(envelope);
   String resp = http.getString();
   http.end();
-
   free(samples);
 
   if (code != 200) {
     Serial.printf("[UPLOAD] HTTP %d\n", code);
+    Serial.println(resp);
     return false;
   }
   Serial.println("[UPLOAD] success: " + resp);
+  // parse response envelope and update nonce
+  SecuredEnvelope env;
+  if (parse_envelope_json(resp, env)) {
+    // verify server mac if required (left for server implementation)
+    nonce_save(env.nonce);
+  }
   return true;
 }

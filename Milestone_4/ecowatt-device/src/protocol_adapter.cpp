@@ -1,11 +1,13 @@
 #include "protocol_adapter.h"
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "security.h"
 
 // Config (defined in main)
 extern const char* URL_READ;
 extern const char* URL_WRITE;
 extern const char* API_KEY;
+
 
 // Slave ID
 const uint8_t SLAVE_ID = 0x11;
