@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 #include "security.h"
 #include <ArduinoJson.h>
+#include "cloud_sync.h"
 
 #include <base64.h> // if using base64 lib; otherwise implement simple base64
 
@@ -92,6 +93,10 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
     return false;
   }
   Serial.println("[UPLOAD] success: " + resp);
+
+  // ==== cloud Sync
+  cloud_sync_cycle();
+
   // parse response envelope and update nonce
   SecuredEnvelope env;
   if (parse_envelope_json(resp, env)) {

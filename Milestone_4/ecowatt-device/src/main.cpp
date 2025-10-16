@@ -6,6 +6,7 @@
 #include "packetizer.h"
 #include <LittleFS.h>
 #include "fota.h"
+#include "cloud_sync.h"
 
 const char* WIFI_SSID     = "OPPO_A3s";
 const char* WIFI_PASSWORD = "12345678";
