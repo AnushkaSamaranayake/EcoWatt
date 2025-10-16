@@ -28,6 +28,26 @@ COMMANDS_QUEUE = defaultdict(list)
 def _device_id_from_path(device_id):
     return device_id
 
+def _unwrap_envelope(req_json):
+    """
+    Accepts either:
+      {"nonce":N, "payload": "<inner JSON string>", "mac":"..."}
+      {"nonce":N, "body":    "<inner JSON string>", "mac":"..."}
+    Returns: (nonce:int, inner:dict, mac:str)
+    """
+    if not isinstance(req_json, dict):
+        raise ValueError("Bad JSON")
+    nonce = req_json.get("nonce")
+    mac   = req_json.get("mac")
+    payload_str = req_json.get("payload") or req_json.get("body")
+    if nonce is None or mac is None or payload_str is None:
+        raise ValueError("Missing envelope fields")
+    try:
+        inner = json.loads(payload_str)
+    except Exception:
+        raise ValueError("Inner payload not JSON")
+    return nonce, inner, mac
+
 # ======= Frontend Server ========
 
 @app.route("/")
@@ -38,72 +58,71 @@ def index():
 
 @app.route("/api/ecowatt/cloud/upload", methods=["POST"])
 def uploadData():
+    # 1) Try headers (optional)
+    hdr_device_id = request.headers.get("x-device-id")
+    hdr_token     = request.headers.get("x-api-key")
 
-    #get headers
-    device_id = request.headers.get("x-device-id")
-    token = request.headers.get("x-api-key")
+    # 2) Parse incoming JSON (envelope or raw)
+    req_json = request.get_json(force=True, silent=True)
+    if not isinstance(req_json, dict):
+        return jsonify({"error": "invalid json"}), 400
 
-    #validate headers
-    if not device_id or not token:
-        print(f"Received upload request from device_id: {device_id}")
-        return jsonify({"error": "Missing device_id or token in headers"}), 400
-    
-    if API_KEYS.get(device_id) != token:
-        print(f"Received upload request from device_id: {device_id}")
-        print(f"Unauthorized access attempt by token: {token}")
-        return jsonify({"error": "Unauthorized"}), 403
+    # 3) If it’s an envelope, unwrap & verify HMAC (use API_KEYS as PSK)
+    inner = None
+    if "mac" in req_json and ("payload" in req_json or "body" in req_json):
+        try:
+            nonce, inner, mac_hex = _unwrap_envelope(req_json)
+        except ValueError as e:
+            return jsonify({"error": f"bad envelope: {e}"}), 400
 
-    #get json data
-    data = request.json
-    
-    #print json dump with indent 4
-    print(json.dumps(data, indent=4))
+        # Determine device_id (prefer header, else inner payload)
+        device_id = hdr_device_id or inner.get("device_id")
+        if not device_id:
+            return jsonify({"error": "missing device_id"}), 400
 
-    #extract relevant fields for Node-Red
+        psk = API_KEYS.get(device_id)
+        if not psk:
+            return jsonify({"error": "unknown device"}), 403
 
-    device_id = data.get("device_id")
-    interval_start = data.get("interval_start")
-    voltage = data.get("voltage")
-    current = data.get("current")
+        mac_calc = hmac.new(psk.encode("utf-8"),
+                            (json.dumps(inner, separators=(",",":"))).encode("utf-8"),
+                            hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(mac_calc, mac_hex):
+            return jsonify({"error": "bad mac"}), 403
 
-    print(type(voltage))
-    print(type(current))
+        data = inner
+    else:
+        # Not an envelope: fall back to raw payload (dev/testing)
+        data = req_json
+        device_id = hdr_device_id or data.get("device_id")
 
-    # for i in range(len(voltage)):
-    #     voltage += voltage[i]
-    
-    # voltage_avg = voltage / len(voltage)
+    # 4) Optional header token check (only if provided)
+    if hdr_device_id and hdr_token:
+        if API_KEYS.get(hdr_device_id) != hdr_token:
+            return jsonify({"error": "unauthorized"}), 403
 
-    # for i in range(len(current)):
-    #     current += current[i]
-
-    # current_avg = current / len(current)
-
-    data_node_red = {
-        "device_id":device_id,
-        "timestamp":interval_start,
-        "voltage":voltage,
-        "current":current
-    }
-
-    print("Data to be sent to Node-Red:")
-    print(json.dumps(data_node_red, indent=4))
-
-    if not data_node_red:
-        return jsonify({"error": "No data provided"}), 400
-    
+    # 5) Forward to Node-RED
     try:
-        print("sending data to Node-Red...")
-        response = requests.post(NODERED_URL_SEND_DATA, json=data_node_red)
+        response = requests.post(NODERED_URL_SEND_DATA, json={
+            "device_id":      data.get("device_id"),
+            "timestamp":      data.get("interval_start"),
+            "voltage":        data.get("voltage"),
+            "current":        data.get("current"),
+            "sample_count":   data.get("sample_count"),
+            "payload_format": data.get("payload_format"),
+            "payload":        data.get("payload"),
+        }, timeout=5)
         response.raise_for_status()
-        return jsonify({
-            "message": "Data uploaded successfully",
-            "node_red_response": response.text
-        }), response.status_code
-    
-    except requests.exceptions.RequestException as e:
-        print(f"Error sending data to Node-Red: {e}")
-        return jsonify({"error": str(e)}), 500
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 502
+
+    # 6) Echo a simple envelope ack back (nonce++), so device can save nonce
+    ack = {
+        "nonce": (req_json.get("nonce", 0) + 1) if isinstance(req_json, dict) else 0,
+        "ok": True
+    }
+    return jsonify(ack), 200
+
     
 # ============ Remote configuration ============
 
@@ -127,9 +146,10 @@ def get_commands(device_id):
     cmds = COMMANDS_QUEUE.get(did, [])
     if not cmds:
         return ("", 204)
-    # drain the queue
     COMMANDS_QUEUE[did] = []
-    return jsonify(cmds)
+    if len(cmds) == 1:
+        return jsonify(cmds[0])          # {"command": {...}}
+    return jsonify({"batch": cmds})     # optional for future
 
 @app.route("/device/<device_id>/command_result", methods=["POST"])
 def post_command_result(device_id):
