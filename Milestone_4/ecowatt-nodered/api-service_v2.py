@@ -279,6 +279,23 @@ def push_command(device_id):
     COMMANDS_QUEUE[did].append({"command": body["command"]})
     return jsonify({"queued": True}) 
 
+# ======= Debug endpoints for frontend =======
+
+@app.route("/debug/config_queue", methods=["GET"])
+def debug_config_queue():
+    """Debug endpoint to see what configs are queued"""
+    return jsonify(CONFIG_QUEUE)
+
+@app.route("/debug/commands_queue", methods=["GET"])
+def debug_commands_queue():
+    """Debug endpoint to see what commands are queued"""
+    return jsonify(dict(COMMANDS_QUEUE))
+
+@app.route("/debug/data_store", methods=["GET"])
+def debug_data_store():
+    """Debug endpoint to see stored inverter data"""
+    return jsonify({device: data[-5:] for device, data in INVERTER_DATA_STORE.items()})  # Last 5 entries per device 
+
 #=============== FOTA update endpoint ===============
 
 # Configuration

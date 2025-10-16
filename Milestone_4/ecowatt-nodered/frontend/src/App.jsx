@@ -24,6 +24,35 @@ const App = () => {
   // API Base URL - adjust according to your setup
   const API_BASE = 'http://10.188.60.251:5000'
 
+  // Preset configurations for easy testing
+  const presetConfigs = {
+    'Basic Config': {
+      sampling_interval: 60,
+      registers: [
+        { address: '0x01', type: 'input', name: 'voltage' },
+        { address: '0x02', type: 'input', name: 'current' }
+      ]
+    },
+    'Extended Config': {
+      sampling_interval: 30,
+      registers: [
+        { address: '0x01', type: 'input', name: 'voltage' },
+        { address: '0x02', type: 'input', name: 'current' },
+        { address: '0x03', type: 'holding', name: 'power_limit' },
+        { address: '0x04', type: 'input', name: 'temperature' }
+      ]
+    }
+  }
+
+  // Preset commands for easy testing
+  const presetCommands = {
+    'Enable Device': { action: 'write_register', target_register: 'status_flag', value: '1' },
+    'Disable Device': { action: 'write_register', target_register: 'status_flag', value: '0' },
+    'Set Power Limit': { action: 'write_register', target_register: 'power_limit', value: '1000' },
+    'Reset Device': { action: 'reset', target_register: '', value: '' },
+    'Read Status': { action: 'read_register', target_register: 'status_flag', value: '' }
+  }
+
   // Fetch real inverter data from API
   const fetchInverterData = async () => {
     try {
@@ -64,25 +93,34 @@ const App = () => {
   // Send configuration to device
   const sendConfiguration = async () => {
     setLoading(true)
+    console.log('Sending configuration:', configData)
+    console.log('To device:', selectedDevice)
+    
     try {
+      const payload = {
+        config_update: configData
+      }
+      console.log('Full payload:', JSON.stringify(payload, null, 2))
+      
       const response = await fetch(`${API_BASE}/push_config/${selectedDevice}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          config_update: configData
-        })
+        body: JSON.stringify(payload)
       })
       
+      const result = await response.text()
+      console.log('Response:', result)
+      
       if (response.ok) {
-        alert('Configuration sent successfully!')
+        alert(`Configuration sent successfully! Response: ${result}`)
       } else {
-        alert('Failed to send configuration')
+        alert(`Failed to send configuration. Status: ${response.status}, Response: ${result}`)
       }
     } catch (error) {
       console.error('Error sending configuration:', error)
-      alert('Error sending configuration')
+      alert(`Error sending configuration: ${error.message}`)
     }
     setLoading(false)
   }
@@ -90,32 +128,85 @@ const App = () => {
   // Send command to device
   const sendCommand = async () => {
     setLoading(true)
+    console.log('Sending command:', commandData)
+    console.log('To device:', selectedDevice)
+    
     try {
+      const payload = {
+        command: {
+          action: commandData.action,
+          target_register: commandData.target_register,
+          value: commandData.value
+        }
+      }
+      console.log('Full payload:', JSON.stringify(payload, null, 2))
+      
       const response = await fetch(`${API_BASE}/push_command/${selectedDevice}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          command: {
-            action: commandData.action,
-            target_register: commandData.target_register,
-            value: commandData.value
-          }
-        })
+        body: JSON.stringify(payload)
       })
       
+      const result = await response.text()
+      console.log('Response:', result)
+      
       if (response.ok) {
-        alert('Command sent successfully!')
+        alert(`Command sent successfully! Response: ${result}`)
         setCommandData({ action: 'write_register', target_register: '', value: '' })
       } else {
-        alert('Failed to send command')
+        alert(`Failed to send command. Status: ${response.status}, Response: ${result}`)
       }
     } catch (error) {
       console.error('Error sending command:', error)
-      alert('Error sending command')
+      alert(`Error sending command: ${error.message}`)
     }
     setLoading(false)
+  }
+
+  // Load preset configuration
+  const loadPresetConfig = (presetName) => {
+    setConfigData(presetConfigs[presetName])
+  }
+
+  // Load preset command
+  const loadPresetCommand = (presetName) => {
+    setCommandData(presetCommands[presetName])
+  }
+
+  // Debug functions to check server state
+  const checkConfigQueue = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/debug/config_queue`)
+      const data = await response.json()
+      console.log('Config Queue:', data)
+      alert(`Config Queue: ${JSON.stringify(data, null, 2)}`)
+    } catch (error) {
+      console.error('Error checking config queue:', error)
+    }
+  }
+
+  const checkCommandsQueue = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/debug/commands_queue`)
+      const data = await response.json()
+      console.log('Commands Queue:', data)
+      alert(`Commands Queue: ${JSON.stringify(data, null, 2)}`)
+    } catch (error) {
+      console.error('Error checking commands queue:', error)
+    }
+  }
+
+  const checkDataStore = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/debug/data_store`)
+      const data = await response.json()
+      console.log('Data Store:', data)
+      alert(`Recent Data: ${JSON.stringify(data, null, 2)}`)
+    } catch (error) {
+      console.error('Error checking data store:', error)
+    }
   }
 
   // Upload FOTA file
@@ -221,16 +312,43 @@ const App = () => {
 
       {/* Device Selection */}
       <div className="bg-white shadow-sm p-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Select Device:</label>
-        <select
-          value={selectedDevice}
-          onChange={(e) => setSelectedDevice(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {devices.map(device => (
-            <option key={device} value={device}>{device}</option>
-          ))}
-        </select>
+        <div className="flex justify-between items-center">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Device:</label>
+            <select
+              value={selectedDevice}
+              onChange={(e) => setSelectedDevice(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {devices.map(device => (
+                <option key={device} value={device}>{device}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Debug Server State:</label>
+            <div className="flex gap-2">
+              <button
+                onClick={checkConfigQueue}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+              >
+                Config Queue
+              </button>
+              <button
+                onClick={checkCommandsQueue}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+              >
+                Commands Queue
+              </button>
+              <button
+                onClick={checkDataStore}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+              >
+                Data Store
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Navigation Tabs */}
@@ -321,6 +439,22 @@ const App = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Remote Configuration</h2>
               
+              {/* Preset Configuration Buttons */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick Presets:</label>
+                <div className="flex gap-2 flex-wrap">
+                  {Object.keys(presetConfigs).map(presetName => (
+                    <button
+                      key={presetName}
+                      onClick={() => loadPresetConfig(presetName)}
+                      className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                    >
+                      {presetName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
               {/* Sampling Interval */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -392,6 +526,22 @@ const App = () => {
             {/* Commands Section */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Send Command</h2>
+              
+              {/* Preset Command Buttons */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick Commands:</label>
+                <div className="flex gap-2 flex-wrap">
+                  {Object.keys(presetCommands).map(presetName => (
+                    <button
+                      key={presetName}
+                      onClick={() => loadPresetCommand(presetName)}
+                      className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                    >
+                      {presetName}
+                    </button>
+                  ))}
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>

@@ -68,10 +68,17 @@ void acquireOnce() {
 //  }
 }
 
+void checkMemoryHealth() {
+  // Monitor free heap memory
+  uint32_t free_heap = ESP.getFreeHeap();
+  if (free_heap < 4096) { // Less than 4KB free
+    Serial.printf("[WARN] Low memory: %d bytes free\n", free_heap);
+    buffer_clear(); // Emergency buffer clear
+  }
+}
+
 void schedulerLoop() {
-
-
   config_apply_staged();
+  checkMemoryHealth();
   acquireOnce();
-  
 }

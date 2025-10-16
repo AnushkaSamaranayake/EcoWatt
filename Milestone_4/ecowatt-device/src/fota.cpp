@@ -9,7 +9,46 @@
 #include <Crypto.h>
 #include <SHA256.h>
 #include <AES.h>
-#include <HMAC.h>
+
+// Custom HMAC-SHA256 implementation since HMAC.h is not available
+static void hmac_sha256(const uint8_t* key, size_t key_len, const uint8_t* data, size_t data_len, uint8_t* out) {
+  const size_t block_size = 64; // SHA256 block size
+  uint8_t k_pad[block_size];
+  
+  // If key is longer than block size, hash it first
+  if (key_len > block_size) {
+    SHA256 hash;
+    hash.reset();
+    hash.update(key, key_len);
+    hash.finalize(k_pad, 32);
+    memset(k_pad + 32, 0, block_size - 32);
+  } else {
+    memcpy(k_pad, key, key_len);
+    memset(k_pad + key_len, 0, block_size - key_len);
+  }
+  
+  // Create inner and outer padding
+  uint8_t i_pad[block_size], o_pad[block_size];
+  for (size_t i = 0; i < block_size; i++) {
+    i_pad[i] = k_pad[i] ^ 0x36;
+    o_pad[i] = k_pad[i] ^ 0x5c;
+  }
+  
+  // Inner hash: H(K XOR ipad, message)
+  SHA256 inner_hash;
+  inner_hash.reset();
+  inner_hash.update(i_pad, block_size);
+  inner_hash.update(data, data_len);
+  uint8_t inner_result[32];
+  inner_hash.finalize(inner_result, 32);
+  
+  // Outer hash: H(K XOR opad, inner_hash)
+  SHA256 outer_hash;
+  outer_hash.reset();
+  outer_hash.update(o_pad, block_size);
+  outer_hash.update(inner_result, 32);
+  outer_hash.finalize(out, 32);
+}
 
 // ---- Config/Paths ----
 static String STATE_PATH = "/fota_state.json";
@@ -114,27 +153,40 @@ static size_t b64decode(uint8_t* out, const String& in) {
 }
 
 //AES-CTR chunk offset increment (last 32 bits)
-static void aesCtrXor(uint8_t* data, size_t len, const uint8_t key[16], const uint8_t iv[16],  uint32_t counterOffset=0) {
+static void aesCtrXor(uint8_t* data, size_t len, const uint8_t key[16], const uint8_t iv[16], uint32_t counterOffset=0) {
+  if (!data || len == 0) return;
+  
   AES128 aes;
+  aes.setKey(key, aes.keySize());
+  
   uint8_t ctr[16];
   memcpy(ctr, iv, 16);
 
   // advance counter by counterOffset blocks (16 bytes per block)
   uint32_t* ctrTail = (uint32_t*)(ctr+12);
-  *ctrTail = *ctrTail + counterOffset;
+  // Convert to big-endian for proper counter increment
+  uint32_t counter_be = (*ctrTail);
+  counter_be += counterOffset;
+  *ctrTail = counter_be;
 
   uint8_t keystream[16];
   size_t off = 0;
+  
   while (off < len) {
     //encrypt counter to produce keystream
     memcpy(keystream, ctr, 16);
-    aes.setKey(key, aes.keySize());
     aes.encryptBlock(keystream, keystream);
 
     size_t chunk = min((size_t)16, len - off);
-    for (size_t i=0; i<chunk; i++) data[off+i] ^= keystream[i];
+    for (size_t i = 0; i < chunk; i++) {
+      data[off + i] ^= keystream[i];
+    }
 
-    (*ctrTail)++;
+    // Increment counter in big-endian format
+    for (int i = 15; i >= 12; i--) {
+      if (++ctr[i] != 0) break; // No carry needed
+    }
+    
     off += chunk;
   }
 }
@@ -204,6 +256,8 @@ namespace FOTA {
   }
 
   void run(const char* apiBase, const char* currentVersion) {
+    Serial.printf("[FOTA] Starting FOTA check. Current version: %s\n", currentVersion);
+    
     // Clear pending if applicable
     confirmBoot(apiBase);
 
@@ -221,8 +275,16 @@ namespace FOTA {
     String hash = (const char*)man["hash"];        // per the reference key name
     String ivHex = (const char*)man["iv"];         // hex 16 bytes IV
 
+    Serial.printf("[FOTA] Manifest: version=%s, size=%d, chunks=%d\n", ver.c_str(), (int)size, (int)total);
+
     if (ver == currentVersion) {
       Serial.println("[FOTA] Up-to-date.");
+      return;
+    }
+    
+    // Validate manifest data
+    if (size == 0 || total == 0 || hash.length() == 0 || ivHex.length() != 32) {
+      Serial.println("[FOTA] Invalid manifest data");
       return;
     }
 
@@ -241,7 +303,7 @@ namespace FOTA {
 
     // Prepare Update
     if (!Update.begin(st.size)) {
-      Serial.printf("[FOTA] Update.begin failed: %s\n", Update.getErrorString());
+      Serial.printf("[FOTA] Update.begin failed: %s\n", Update.getErrorString().c_str());
       clearState();
       return;
     }
@@ -270,37 +332,67 @@ namespace FOTA {
       String macHex = (const char*)cj["mac"];
       String dataB64 = (const char*)cj["data"];
 
-      // Decode cipher
+      // Decode cipher with better error handling
       size_t maxOut = (dataB64.length() * 3) / 4 + 4;
       std::unique_ptr<uint8_t[]> cipher(new uint8_t[maxOut]);
       size_t cLen = b64decode(cipher.get(), dataB64);
-      if (!cLen) { Serial.println("[FOTA] b64 decode fail."); Update.end(false); return; }
+      if (!cLen || cLen > maxOut) { 
+        Serial.printf("[FOTA] b64 decode fail. Expected ~%d, got %d\n", (int)maxOut, (int)cLen);
+        Update.end(false); 
+        return; 
+      }
+      
+      Serial.printf("[FOTA] Chunk %d: decoded %d bytes\n", (int)n, (int)cLen);
 
       // Verify IV identical to manifest (or chunk IV if server varies)
       uint8_t ivc[16];
       if (!hexToBytes(ivHex2, ivc, 16)) { Serial.println("[FOTA] bad iv hex."); Update.end(false); return; }
 
       // Verify HMAC: HMAC(K, n||iv||cipher)
-      HMAC<SHA256> hmac;
-      hmac.reset(HMAC_KEY, sizeof(HMAC_KEY));
+      size_t hmac_data_len = 4 + 16 + cLen;
+      uint8_t* hmac_data = (uint8_t*)malloc(hmac_data_len);
+      if (!hmac_data) {
+        Serial.println("[FOTA] HMAC data allocation failed");
+        Update.end(false);
+        return;
+      }
+      
+      // Build HMAC input: n||iv||cipher
       uint8_t nb[4] = {(uint8_t)(n>>24),(uint8_t)(n>>16),(uint8_t)(n>>8),(uint8_t)n};
-      hmac.update(nb, 4);
-      hmac.update(ivc, 16);
-      hmac.update(cipher.get(), cLen);
-      uint8_t mac[32]; hmac.finalize(mac, sizeof(mac));
+      memcpy(hmac_data, nb, 4);
+      memcpy(hmac_data + 4, ivc, 16);
+      memcpy(hmac_data + 20, cipher.get(), cLen);
+      
+      uint8_t mac[32];
+      hmac_sha256(HMAC_KEY, sizeof(HMAC_KEY), hmac_data, hmac_data_len, mac);
+      free(hmac_data);
+      
       String macCalc = b2hex(mac, 32);
       if (!macCalc.equalsIgnoreCase(macHex)) {
-        Serial.println("[FOTA] HMAC verify failed."); Update.end(false); return;
+        Serial.printf("[FOTA] HMAC verify failed. Expected: %s, Got: %s\n", macHex.c_str(), macCalc.c_str());
+        Update.end(false); 
+        return;
       }
 
-      // Decrypt in place (CTR) — counterOffset = (chunk_bytes / 16) * n? We reset counter per chunk using chunk offset blocks.
-      // We'll compute offset (blocks) = (n * chunkSize)/16
-      uint32_t blockOffset = ( (uint64_t)n * (uint64_t)st.chunkSize ) / 16;
-      aesCtrXor(cipher.get(), cLen, AES_KEY, ivc, blockOffset);
+      // Decrypt in place (CTR) — Each chunk starts with fresh IV, no offset
+      // The server should provide fresh IV per chunk or we calculate based on chunk number
+      aesCtrXor(cipher.get(), cLen, AES_KEY, ivc, 0); // Start from 0 for each chunk
+      
+      // Add integrity check - verify some decrypted content makes sense
+      if (n == 0) {
+        // First chunk should start with ELF header for ESP8266 firmware
+        if (cLen >= 4 && cipher[0] != 0x7f && cipher[1] != 'E' && cipher[2] != 'L' && cipher[3] != 'F') {
+          Serial.println("[FOTA] Warning: First chunk doesn't look like ELF firmware");
+        }
+      }
 
       // Write plaintext to flash and to running SHA256
       size_t w = Update.write(cipher.get(), cLen);
-      if (w != cLen) { Serial.printf("[FOTA] Flash write fail: %s\n", Update.getErrorString()); Update.end(false); return; }
+      if (w != cLen) { 
+        Serial.printf("[FOTA] Flash write fail: %s\n", Update.getErrorString().c_str()); 
+        Update.end(false); 
+        return; 
+      }
       imgHash.update(cipher.get(), cLen);
 
       st.nextChunk = n + 1; saveState(st);
@@ -308,17 +400,38 @@ namespace FOTA {
       Serial.printf("[FOTA] chunk %lu/%lu OK\n", (unsigned long)(n+1), (unsigned long)st.totalChunks);
     }
 
-    // Final SHA256 compare
-    uint8_t sum[32]; imgHash.finalize(sum, 32);
+    // Final SHA256 compare with detailed logging
+    uint8_t sum[32]; 
+    imgHash.finalize(sum, 32);
     String sumHex = b2hex(sum, 32);
+    
+    Serial.printf("[FOTA] Calculated SHA256: %s\n", sumHex.c_str());
+    Serial.printf("[FOTA] Expected SHA256:   %s\n", st.sha256.c_str());
+    
     if (!sumHex.equalsIgnoreCase(st.sha256)) {
-      Serial.println("[FOTA] Final SHA256 mismatch → rollback.");
-      Update.end(false); clearState(); report(apiBase, "sha_fail", st.totalChunks, st.target); return;
+      Serial.println("[FOTA] SHA256 mismatch detected!");
+      Serial.printf("[FOTA] Total bytes processed: %d\n", (int)st.size);
+      Serial.printf("[FOTA] Chunks processed: %d/%d\n", (int)st.totalChunks, (int)st.totalChunks);
+      
+      // Additional debugging - check first few bytes of calculated hash
+      Serial.print("[FOTA] Calculated hash bytes: ");
+      for (int i = 0; i < 8; i++) {
+        Serial.printf("%02x ", sum[i]);
+      }
+      Serial.println();
+      
+      Update.end(false); 
+      clearState(); 
+      report(apiBase, "sha_fail", st.totalChunks, st.target); 
+      return;
     }
+    
+    Serial.println("[FOTA] SHA256 verification passed!");
 
     if (!Update.end(true)) {
-      Serial.printf("[FOTA] Update.end failed: %s\n", Update.getErrorString());
-      clearState(); return;
+      Serial.printf("[FOTA] Update.end failed: %s\n", Update.getErrorString().c_str());
+      clearState(); 
+      return;
     }
 
     // Mark pending OK and reboot
