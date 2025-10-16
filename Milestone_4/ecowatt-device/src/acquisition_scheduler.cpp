@@ -10,7 +10,7 @@ unsigned long lastPoll = 0;
 unsigned long lastUpload=0;
 unsigned long POLL_INTERVAL_MS = 1000;
 unsigned long UPLOAD_INTERVAL_MS = 15000; // demo 15s instead of 15min
-const char* DEVICE_ID = "node123";
+const char* DEVICE_ID = "EcoWatt001";
 
 float gainForRegister(uint16_t reg) {
   switch (reg) {

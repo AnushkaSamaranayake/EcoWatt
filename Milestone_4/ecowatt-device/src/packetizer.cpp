@@ -10,7 +10,7 @@
 #include <base64.h> // if using base64 lib; otherwise implement simple base64
 
 extern const char* URL_UPLOAD; // define in main
-extern const char* DEVICE_PSK;
+extern const char* API_KEY_1;
 
 bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms, uint8_t* workbuf, size_t workcap){
   size_t cnt = buffer_count();
@@ -74,14 +74,21 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
 
   // secure envelope
   uint32_t nonce = nonce_load() + 1;
-  String mac = compute_hmac_hex((const uint8_t*)DEVICE_PSK, strlen(DEVICE_PSK),
+  String mac = compute_hmac_hex((const uint8_t*)API_KEY_1, strlen(API_KEY_1),
                                (const uint8_t*)body.c_str(), body.length());
   String envelope = build_envelope_json(nonce, body, mac);
+  Serial.println("[UPLOAD] Posting ENVELOPE:");
+  Serial.println(envelope);
+
+  // send HTTP POST
 
   WiFiClient client;
   HTTPClient http;
   if (!http.begin(client, URL_UPLOAD)) { free(samples); return false; }
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-id", device_id);
+  http.addHeader("x-api-key", API_KEY_1);
+
   int code = http.POST(envelope);
   String resp = http.getString();
   http.end();

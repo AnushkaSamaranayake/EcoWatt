@@ -9,6 +9,7 @@ const App = () => {
     registers: []
   })
   const [commandData, setCommandData] = useState({
+    
     action: 'write_register',
     target_register: '',
     value: ''
@@ -21,30 +22,43 @@ const App = () => {
   const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
 
   // API Base URL - adjust according to your setup
-  const API_BASE = 'http://localhost:5000'
+  const API_BASE = 'http://10.109.27.251:5000'
 
-  // Simulate inverter data (replace with actual API call)
-  const fetchInverterData = () => {
-    // This would be replaced with actual API call to get inverter data
-    const simulatedData = [
-      {
-        device_id: 'EcoWatt001',
-        timestamp: new Date().toISOString(),
-        voltage: 230.5,
-        current: 15.2,
-        power: 3503.6,
-        status: 'Online'
-      },
-      {
-        device_id: 'EcoWatt002',
-        timestamp: new Date().toISOString(),
-        voltage: 225.8,
-        current: 12.8,
-        power: 2890.2,
-        status: 'Online'
+  // Fetch real inverter data from API
+  const fetchInverterData = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/inverters`)
+      if (response.ok) {
+        const data = await response.json()
+        setInverterData(data)
+      } else {
+        console.error('Failed to fetch inverter data')
+        // Fallback to simulated data if API fails
+        const simulatedData = [
+          {
+            device_id: 'EcoWatt001',
+            timestamp: new Date().toISOString(),
+            voltage: 230.5,
+            current: 15.2,
+            power: 3503.6,
+            status: 'Online'
+          },
+          {
+            device_id: 'EcoWatt002',
+            timestamp: new Date().toISOString(),
+            voltage: 225.8,
+            current: 12.8,
+            power: 2890.2,
+            status: 'Online'
+          }
+        ]
+        setInverterData(simulatedData)
       }
-    ]
-    setInverterData(simulatedData)
+    } catch (error) {
+      console.error('Error fetching inverter data:', error)
+      // Fallback to empty array if error
+      setInverterData([])
+    }
   }
 
   // Send configuration to device
@@ -165,6 +179,32 @@ const App = () => {
     }))
   }
 
+  // Inject sample data for testing
+  const injectSampleData = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/test/inject_sample_data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        alert(result.message)
+        // Refresh data after injection
+        fetchInverterData()
+      } else {
+        alert('Failed to inject sample data')
+      }
+    } catch (error) {
+      console.error('Error injecting sample data:', error)
+      alert('Error injecting sample data')
+    }
+    setLoading(false)
+  }
+
   useEffect(() => {
     fetchInverterData()
     const interval = setInterval(fetchInverterData, 30000) // Refresh every 30 seconds
@@ -224,12 +264,21 @@ const App = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Inverter Output Data</h2>
-                <button
-                  onClick={fetchInverterData}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
-                >
-                  Refresh
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={injectSampleData}
+                    disabled={loading}
+                    className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    {loading ? 'Injecting...' : 'Add Sample Data'}
+                  </button>
+                  <button
+                    onClick={fetchInverterData}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

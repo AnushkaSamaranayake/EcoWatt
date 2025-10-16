@@ -8,17 +8,21 @@
 #include "fota.h"
 #include "cloud_sync.h"
 
-const char* WIFI_SSID     = "OPPO_A3s";
+const char* WIFI_SSID     = "Anushka's Galaxy M12";
 const char* WIFI_PASSWORD = "12345678";
 
 // Cloud API URLs
 const char* URL_READ  = "http://20.15.114.131:8080/api/inverter/read";
 const char* URL_WRITE = "http://20.15.114.131:8080/api/inverter/write";
 const char* API_KEY   = "NjhhZWIwNDU1ZDdmMzg3MzNiMTQ5YTIwOjY4YWViMDQ1NWQ3ZjM4NzMzYjE0OWExNg==";
-const char* URL_UPLOAD = "http://127.0.0.1:5000/upload"; 
-const char* API_KEY_1   = "aa1c38aaa59b94ff2339060e298826e2";
+// const char* URL_UPLOAD = "http://10.109.27.251:5000/api/ecowatt/cloud/upload"; 
+const char* API_KEY_1   = "EcowattUploadsMzo11quhRx40l6eqLV22BWvQ5ozk6iolLO60GaOa1j2R7tthoSiKHlpROjT5nW2179vkSeJoMQsjZWjLDLgVOIVM86SlaRki0cgWqep9QRHYlbqsPC";
 
-const char* API_BASE = "http://<ip address of network>:5000";
+// Replace with the PSK that matches Flask's API_KEYS
+// const char* DEVICE_PSK = "aa1c38aaa59b94ff2339060e298826e2"; 
+const char* URL_UPLOAD  = "http://10.109.27.251:5000/api/ecowatt/cloud/upload";
+
+const char* API_BASE = "http://10.188.60.251:5000";
 
 const char* CURRENT_VERSION = "v1.0.0";
 

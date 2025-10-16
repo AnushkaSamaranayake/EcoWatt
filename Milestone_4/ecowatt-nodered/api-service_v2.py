@@ -1,18 +1,33 @@
 from flask import Flask, json, request, jsonify
+from flask_cors import CORS
 import requests
 import os, hashlib, hmac, secrets, math, base64
 from dotenv import load_dotenv
 from typing import Tuple
 from collections import defaultdict
 import time
+from datetime import datetime
 
 #Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
-NODERED_URL_SEND_DATA = "http://10.104.204.251:1880/api/v1/upload"
-NODERED_URL_GET_DATA = "http://10.104.204.251:1880/api/v1/history/:device_id"
+# Enable CORS for React frontend
+try:
+    CORS(app)
+except ImportError:
+    # If flask-cors is not installed, add basic CORS headers manually
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+
+# Store inverter data locally instead of forwarding to Node-RED
+INVERTER_DATA_STORE = defaultdict(list)
+MAX_DATA_POINTS = 100  # Keep last 100 data points per device
 
 API_KEYS = {
     "EcoWatt001" : os.getenv("API_KEY_1"),
@@ -29,30 +44,84 @@ def _device_id_from_path(device_id):
     return device_id
 
 def _unwrap_envelope(req_json):
-    """
-    Accepts either:
-      {"nonce":N, "payload": "<inner JSON string>", "mac":"..."}
-      {"nonce":N, "body":    "<inner JSON string>", "mac":"..."}
-    Returns: (nonce:int, inner:dict, mac:str)
-    """
-    if not isinstance(req_json, dict):
-        raise ValueError("Bad JSON")
     nonce = req_json.get("nonce")
-    mac   = req_json.get("mac")
-    payload_str = req_json.get("payload") or req_json.get("body")
-    if nonce is None or mac is None or payload_str is None:
-        raise ValueError("Missing envelope fields")
+    payload_str = req_json.get("payload")
+    mac_hex = req_json.get("mac")
+    if not (nonce and payload_str and mac_hex):
+        raise ValueError("missing envelope fields")
     try:
         inner = json.loads(payload_str)
     except Exception:
         raise ValueError("Inner payload not JSON")
-    return nonce, inner, mac
+    return nonce, inner, payload_str, mac_hex
 
 # ======= Frontend Server ========
 
 @app.route("/")
 def index():
     return "EcoWatt API Service is running"
+
+# ======= Frontend API Endpoints ==========
+
+@app.route("/api/inverters", methods=["GET"])
+def get_all_inverters():
+    """Get latest data for all inverters"""
+    result = []
+    for device_id, data_points in INVERTER_DATA_STORE.items():
+        if data_points:
+            # Get the latest data point
+            latest = data_points[-1]
+            result.append(latest)
+    return jsonify(result)
+
+@app.route("/api/inverters/<device_id>", methods=["GET"])
+def get_inverter_data(device_id):
+    """Get data for a specific inverter"""
+    data_points = INVERTER_DATA_STORE.get(device_id, [])
+    if not data_points:
+        return jsonify({"error": "No data found for device"}), 404
+    
+    # Return latest data point
+    return jsonify(data_points[-1])
+
+@app.route("/api/inverters/<device_id>/history", methods=["GET"])
+def get_inverter_history(device_id):
+    """Get historical data for a specific inverter"""
+    limit = request.args.get('limit', 50, type=int)
+    data_points = INVERTER_DATA_STORE.get(device_id, [])
+    
+    # Return last 'limit' data points
+    return jsonify(data_points[-limit:] if data_points else [])
+
+@app.route("/api/test/inject_sample_data", methods=["POST"])
+def inject_sample_data():
+    """Inject sample data for testing (development only)"""
+    import random
+    
+    devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
+    
+    for device in devices:
+        # Generate random but realistic values
+        voltage = round(220 + random.uniform(-10, 10), 2)
+        current = round(10 + random.uniform(-5, 5), 2)
+        
+        data_point = {
+            "device_id": device,
+            "timestamp": datetime.now().isoformat(),
+            "voltage": voltage,
+            "current": current,
+            "power": round(voltage * current, 2),
+            "sample_count": random.randint(50, 100),
+            "payload_format": "json",
+            "payload": f"test_data_{device}",
+            "status": "Online"
+        }
+        
+        INVERTER_DATA_STORE[device].append(data_point)
+        if len(INVERTER_DATA_STORE[device]) > MAX_DATA_POINTS:
+            INVERTER_DATA_STORE[device] = INVERTER_DATA_STORE[device][-MAX_DATA_POINTS:]
+    
+    return jsonify({"message": f"Sample data injected for {len(devices)} devices"})
 
 # ======= Cloud upload ==========
 
@@ -71,7 +140,7 @@ def uploadData():
     inner = None
     if "mac" in req_json and ("payload" in req_json or "body" in req_json):
         try:
-            nonce, inner, mac_hex = _unwrap_envelope(req_json)
+            nonce, inner, payload_str, mac_hex = _unwrap_envelope(req_json)
         except ValueError as e:
             return jsonify({"error": f"bad envelope: {e}"}), 400
 
@@ -84,9 +153,11 @@ def uploadData():
         if not psk:
             return jsonify({"error": "unknown device"}), 403
 
-        mac_calc = hmac.new(psk.encode("utf-8"),
-                            (json.dumps(inner, separators=(",",":"))).encode("utf-8"),
-                            hashlib.sha256).hexdigest()
+        mac_calc = hmac.new(
+            psk.encode("utf-8"),
+            payload_str.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
         if not hmac.compare_digest(mac_calc, mac_hex):
             return jsonify({"error": "bad mac"}), 403
 
@@ -101,20 +172,49 @@ def uploadData():
         if API_KEYS.get(hdr_device_id) != hdr_token:
             return jsonify({"error": "unauthorized"}), 403
 
-    # 5) Forward to Node-RED
-    try:
-        response = requests.post(NODERED_URL_SEND_DATA, json={
-            "device_id":      data.get("device_id"),
-            "timestamp":      data.get("interval_start"),
-            "voltage":        data.get("voltage"),
-            "current":        data.get("current"),
-            "sample_count":   data.get("sample_count"),
+    # 5) Store data locally for frontend consumption
+    device_id = (data or {}).get("device_id") or hdr_device_id
+    if device_id and data:
+        # Normalize timestamp: device sends ms epoch; fall back to ISO now()
+        ts = data.get("interval_start")
+        if isinstance(ts, (int, float)):
+            # ms -> ISO UTC
+            timestamp = datetime.utcfromtimestamp(ts / 1000.0).isoformat() + "Z"
+        else:
+            timestamp = datetime.utcnow().isoformat() + "Z"
+
+        voltages = data.get("voltage", [])
+        currents = data.get("current", [])
+
+        # Allow either arrays OR single numbers
+        if isinstance(voltages, list) and isinstance(currents, list) and voltages and currents:
+            # Average instantaneous power across samples
+            power = sum(v * c for v, c in zip(voltages, currents)) / len(voltages)
+        else:
+            # Try scalar fallback
+            try:
+                v = float(voltages if isinstance(voltages, (int, float)) else 0.0)
+                c = float(currents if isinstance(currents, (int, float)) else 0.0)
+                power = v * c
+            except Exception:
+                power = 0.0
+
+        data_point = {
+            "device_id": device_id,
+            "timestamp": timestamp,
+            "sample_count": data.get("sample_count", 0),
             "payload_format": data.get("payload_format"),
-            "payload":        data.get("payload"),
-        }, timeout=5)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        return jsonify({"error": str(e)}), 502
+            "payload": data.get("payload"),
+            "voltage": voltages,
+            "current": currents,
+            "power": round(power, 3),
+            "status": "Online",
+        }
+
+        # Store in memory (keep only last MAX_DATA_POINTS)
+        INVERTER_DATA_STORE[device_id].append(data_point)
+        if len(INVERTER_DATA_STORE[device_id]) > MAX_DATA_POINTS:
+            INVERTER_DATA_STORE[device_id] = INVERTER_DATA_STORE[device_id][-MAX_DATA_POINTS:]
 
     # 6) Echo a simple envelope ack back (nonce++), so device can save nonce
     ack = {
@@ -197,8 +297,11 @@ ACTIVE_SHA256 = None
 TOTAL_CHUNKS = None
 
 def ensure_active_ready():
+    """Return False if firmware not initialized, instead of raising."""
     if not (ACTIVE_VERSION and ACTIVE_PATH and ACTIVE_IV and ACTIVE_SHA256):
-        raise RuntimeError("Active firmware is not set")
+        print("[FOTA] Manifest requested but no active firmware set.")
+        return False
+    return True
 
 def sha256_file(path:str)->str:
     h = hashlib.sha256()
@@ -286,11 +389,13 @@ def upload_firmware():
 
 @app.route("/manifest", methods=["GET"])
 def manifest():
-    ensure_active_ready()
+    if not ensure_active_ready():
+        # 204 = No Content (or 200 with a small JSON marker if you prefer)
+        return jsonify({"status": "no_active_firmware"}), 204
     return jsonify({
         "version": ACTIVE_VERSION,
         "size": ACTIVE_SIZE,
-        "hash": ACTIVE_SHA256,       # reference field name
+        "hash": ACTIVE_SHA256,
         "chunk_size": CHUNK_SIZE,
         "iv": ACTIVE_IV.hex(),
         "total_chunks": TOTAL_CHUNKS
@@ -303,13 +408,13 @@ def read_chunk(n:int)->bytes:
 
 @app.route("/chunk", methods=["GET"])
 def chunk():
-    ensure_active_ready()
+    if not ensure_active_ready():
+        return jsonify({"error": "no active firmware"}), 404
     try:
         version = request.args["version"]
         n = int(request.args["n"])
     except Exception:
         return jsonify({"error": "bad request"}), 400
-
     if version != ACTIVE_VERSION or n < 0 or n >= TOTAL_CHUNKS:
         return jsonify({"error": "no such chunk"}), 404
 
