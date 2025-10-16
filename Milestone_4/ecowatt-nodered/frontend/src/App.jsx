@@ -1,8 +1,457 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 
 const App = () => {
+  const [activeTab, setActiveTab] = useState('inverter')
+  const [inverterData, setInverterData] = useState([])
+  const [selectedDevice, setSelectedDevice] = useState('EcoWatt001')
+  const [configData, setConfigData] = useState({
+    sampling_interval: 60,
+    registers: []
+  })
+  const [commandData, setCommandData] = useState({
+    action: 'write_register',
+    target_register: '',
+    value: ''
+  })
+  const [fotaFile, setFotaFile] = useState(null)
+  const [fotaVersion, setFotaVersion] = useState('')
+  const [fotaStatus, setFotaStatus] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
+
+  // API Base URL - adjust according to your setup
+  const API_BASE = 'http://localhost:5000'
+
+  // Simulate inverter data (replace with actual API call)
+  const fetchInverterData = () => {
+    // This would be replaced with actual API call to get inverter data
+    const simulatedData = [
+      {
+        device_id: 'EcoWatt001',
+        timestamp: new Date().toISOString(),
+        voltage: 230.5,
+        current: 15.2,
+        power: 3503.6,
+        status: 'Online'
+      },
+      {
+        device_id: 'EcoWatt002',
+        timestamp: new Date().toISOString(),
+        voltage: 225.8,
+        current: 12.8,
+        power: 2890.2,
+        status: 'Online'
+      }
+    ]
+    setInverterData(simulatedData)
+  }
+
+  // Send configuration to device
+  const sendConfiguration = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE}/push_config/${selectedDevice}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config_update: configData
+        })
+      })
+      
+      if (response.ok) {
+        alert('Configuration sent successfully!')
+      } else {
+        alert('Failed to send configuration')
+      }
+    } catch (error) {
+      console.error('Error sending configuration:', error)
+      alert('Error sending configuration')
+    }
+    setLoading(false)
+  }
+
+  // Send command to device
+  const sendCommand = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE}/push_command/${selectedDevice}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          command: {
+            action: commandData.action,
+            target_register: commandData.target_register,
+            value: commandData.value
+          }
+        })
+      })
+      
+      if (response.ok) {
+        alert('Command sent successfully!')
+        setCommandData({ action: 'write_register', target_register: '', value: '' })
+      } else {
+        alert('Failed to send command')
+      }
+    } catch (error) {
+      console.error('Error sending command:', error)
+      alert('Error sending command')
+    }
+    setLoading(false)
+  }
+
+  // Upload FOTA file
+  const uploadFotaFile = async () => {
+    if (!fotaFile || !fotaVersion) {
+      alert('Please select a file and enter version')
+      return
+    }
+
+    setLoading(true)
+    setFotaStatus('Uploading...')
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', fotaFile)
+      formData.append('version', fotaVersion)
+
+      const response = await fetch(`${API_BASE}/upload_firmware`, {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setFotaStatus(`Upload successful! Version: ${result.version}, Size: ${result.size} bytes`)
+        setFotaFile(null)
+        setFotaVersion('')
+      } else {
+        setFotaStatus('Upload failed')
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      setFotaStatus('Upload error')
+    }
+    setLoading(false)
+  }
+
+  // Add register to config
+  const addRegister = () => {
+    setConfigData(prev => ({
+      ...prev,
+      registers: [...prev.registers, { address: '', type: 'input', name: '' }]
+    }))
+  }
+
+  // Update register in config
+  const updateRegister = (index, field, value) => {
+    setConfigData(prev => ({
+      ...prev,
+      registers: prev.registers.map((reg, i) => 
+        i === index ? { ...reg, [field]: value } : reg
+      )
+    }))
+  }
+
+  // Remove register from config
+  const removeRegister = (index) => {
+    setConfigData(prev => ({
+      ...prev,
+      registers: prev.registers.filter((_, i) => i !== index)
+    }))
+  }
+
+  useEffect(() => {
+    fetchInverterData()
+    const interval = setInterval(fetchInverterData, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
+
   return (
-    <div>Hello World</div>
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <div className="bg-blue-600 text-white p-4">
+        <h1 className="text-2xl font-bold">EcoWatt Inverter Management System</h1>
+        <p className="text-blue-100">Monitor, Configure, and Update Your Solar Inverters</p>
+      </div>
+
+      {/* Device Selection */}
+      <div className="bg-white shadow-sm p-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Select Device:</label>
+        <select
+          value={selectedDevice}
+          onChange={(e) => setSelectedDevice(e.target.value)}
+          className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {devices.map(device => (
+            <option key={device} value={device}>{device}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white shadow-sm">
+        <nav className="flex space-x-8 px-4">
+          {[
+            { id: 'inverter', label: 'Inverter Data' },
+            { id: 'config', label: 'Configuration' },
+            { id: 'fota', label: 'FOTA Upload' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Content Area */}
+      <div className="p-6">
+        {/* Inverter Data Tab */}
+        {activeTab === 'inverter' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Inverter Output Data</h2>
+                <button
+                  onClick={fetchInverterData}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
+                >
+                  Refresh
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {inverterData.map((device, index) => (
+                  <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                    <h3 className="font-medium text-lg mb-2">{device.device_id}</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Voltage:</span>
+                        <span className="font-medium">{device.voltage} V</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Current:</span>
+                        <span className="font-medium">{device.current} A</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Power:</span>
+                        <span className="font-medium">{device.power} W</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Status:</span>
+                        <span className={`font-medium ${device.status === 'Online' ? 'text-green-600' : 'text-red-600'}`}>
+                          {device.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        Last update: {new Date(device.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Configuration Tab */}
+        {activeTab === 'config' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Remote Configuration</h2>
+              
+              {/* Sampling Interval */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sampling Interval (seconds)
+                </label>
+                <input
+                  type="number"
+                  value={configData.sampling_interval}
+                  onChange={(e) => setConfigData(prev => ({ ...prev, sampling_interval: parseInt(e.target.value) }))}
+                  className="border border-gray-300 rounded-md px-3 py-2 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Registers Configuration */}
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <label className="block text-sm font-medium text-gray-700">Registers</label>
+                  <button
+                    onClick={addRegister}
+                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Add Register
+                  </button>
+                </div>
+                
+                {configData.registers.map((register, index) => (
+                  <div key={index} className="grid grid-cols-4 gap-4 mb-3 p-3 border rounded">
+                    <input
+                      type="text"
+                      placeholder="Address"
+                      value={register.address}
+                      onChange={(e) => updateRegister(index, 'address', e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <select
+                      value={register.type}
+                      onChange={(e) => updateRegister(index, 'type', e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="input">Input</option>
+                      <option value="holding">Holding</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Name"
+                      value={register.name}
+                      onChange={(e) => updateRegister(index, 'name', e.target.value)}
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => removeRegister(index)}
+                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={sendConfiguration}
+                disabled={loading}
+                className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-6 py-2 rounded-md"
+              >
+                {loading ? 'Sending...' : 'Send Configuration'}
+              </button>
+            </div>
+
+            {/* Commands Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Send Command</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                  <select
+                    value={commandData.action}
+                    onChange={(e) => setCommandData(prev => ({ ...prev, action: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="write_register">Write Register</option>
+                    <option value="read_register">Read Register</option>
+                    <option value="reset">Reset</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Target Register</label>
+                  <input
+                    type="text"
+                    value={commandData.target_register}
+                    onChange={(e) => setCommandData(prev => ({ ...prev, target_register: e.target.value }))}
+                    placeholder="e.g., status_flag"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Value</label>
+                  <input
+                    type="text"
+                    value={commandData.value}
+                    onChange={(e) => setCommandData(prev => ({ ...prev, value: e.target.value }))}
+                    placeholder="e.g., 1"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={sendCommand}
+                disabled={loading}
+                className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white px-6 py-2 rounded-md"
+              >
+                {loading ? 'Sending...' : 'Send Command'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* FOTA Upload Tab */}
+        {activeTab === 'fota' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Firmware Over The Air (FOTA) Update</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Firmware Version
+                </label>
+                <input
+                  type="text"
+                  value={fotaVersion}
+                  onChange={(e) => setFotaVersion(e.target.value)}
+                  placeholder="e.g., 1.2.3"
+                  className="border border-gray-300 rounded-md px-3 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Firmware File (.bin)
+                </label>
+                <input
+                  type="file"
+                  accept=".bin"
+                  onChange={(e) => setFotaFile(e.target.files[0])}
+                  className="border border-gray-300 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <button
+                onClick={uploadFotaFile}
+                disabled={loading || !fotaFile || !fotaVersion}
+                className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white px-6 py-2 rounded-md"
+              >
+                {loading ? 'Uploading...' : 'Upload Firmware'}
+              </button>
+
+              {fotaStatus && (
+                <div className={`mt-4 p-3 rounded ${fotaStatus.includes('successful') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {fotaStatus}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium text-gray-900 mb-2">FOTA Process:</h3>
+              <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1">
+                <li>Upload firmware file with version number</li>
+                <li>File is processed and chunked for secure transmission</li>
+                <li>Devices will automatically check for new firmware</li>
+                <li>Download and installation happens over-the-air</li>
+                <li>Device reports back installation status</li>
+              </ol>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
