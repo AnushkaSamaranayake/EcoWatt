@@ -8,12 +8,12 @@
 
 #include <Crypto.h>
 #include <SHA256.h>
-#include <HMAC.h>
 #include <AES.h>
+#include <HMAC.h>
 
 // ---- Config/Paths ----
 static String STATE_PATH = "/fota_state.json";
-static String PENDIGN_OK = "/pending_ok";
+static String PENDING_OK = "/pending_ok";
 
 // === Shared keys (match server) ===
 // AES-128 key (16 bytes)
@@ -46,10 +46,11 @@ static bool httpGetJson(const String& url, DynamicJsonDocument& doc) {
   return !err;
 }
 
-static bool httpPostJson(cosnt String& url, const String& body) {
+static bool httpPostJson(const String& url, const String& body) {
   WiFiClient client;
   HTTPClient http;
   if(!http.begin(client, url)) return false;
+  http.addHeader("Content-Type", "application/json");
   int code = http.POST(body);
   http.end();
   return code == 200;
@@ -78,15 +79,38 @@ static bool hexToBytes(const String& hex, uint8_t* out, size_t outlen) {
   return true;
 }
 
-//Base64 decode (ESP8266 core)
-extern "C" {
-  #include "libb64/cdecode.h
-}
-
+// Base64 decode using ESP8266 built-in functions
 static size_t b64decode(uint8_t* out, const String& in) {
-  base64_decodestate st; base64_init_decodestate(&st);
-  int outlen = base64_decode_block(in.c_str(), in.length(), (char*)out, &st);
-  return outlen < 0 ? 0 : (size_t)outlen; 
+  // Simple base64 decode implementation
+  const char* chars = in.c_str();
+  size_t len = in.length();
+  size_t outLen = 0;
+  
+  for (size_t i = 0; i < len; i += 4) {
+    uint32_t val = 0;
+    int pad = 0;
+    
+    for (int j = 0; j < 4; j++) {
+      if (i + j >= len) break;
+      char c = chars[i + j];
+      uint8_t b = 0;
+      
+      if (c >= 'A' && c <= 'Z') b = c - 'A';
+      else if (c >= 'a' && c <= 'z') b = c - 'a' + 26;  
+      else if (c >= '0' && c <= '9') b = c - '0' + 52;
+      else if (c == '+') b = 62;
+      else if (c == '/') b = 63;
+      else if (c == '=') { pad++; b = 0; }
+      
+      val = (val << 6) | b;
+    }
+    
+    if (pad < 3) out[outLen++] = (val >> 16) & 0xFF;
+    if (pad < 2) out[outLen++] = (val >> 8) & 0xFF;
+    if (pad < 1) out[outLen++] = val & 0xFF;
+  }
+  
+  return outLen;
 }
 
 //AES-CTR chunk offset increment (last 32 bits)
@@ -121,7 +145,7 @@ namespace FOTA {
     uint32_t nextChunk;
     uint32_t totalChunks;
     uint32_t size;
-    uint32_t ChunkSize;
+    uint32_t chunkSize;
     String sha256;
     String ivHex;
   };
@@ -217,7 +241,7 @@ namespace FOTA {
 
     // Prepare Update
     if (!Update.begin(st.size)) {
-      Serial.printf("[FOTA] Update.begin failed: %s\n", Update.errorString());
+      Serial.printf("[FOTA] Update.begin failed: %s\n", Update.getErrorString());
       clearState();
       return;
     }
@@ -229,7 +253,7 @@ namespace FOTA {
     uint8_t iv[16];
     if (!hexToBytes(st.ivHex, iv, 16)) {
       Serial.println("[FOTA] Bad IV in manifest.");
-      Update.abort(); clearState(); return;
+      Update.end(false); clearState(); return;
     }
 
     // Loop chunks
@@ -237,10 +261,10 @@ namespace FOTA {
       DynamicJsonDocument cj(4096);
       String url = String(apiBase) + "/chunk?version=" + st.target + "&n=" + n;
       if (!httpGetJson(url, cj)) {
-        Serial.println("[FOTA] chunk fetch failed."); Update.abort(); return;
+        Serial.println("[FOTA] chunk fetch failed."); Update.end(false); return;
       }
       uint32_t num = cj["chunk_number"] | 0;
-      if (num != n) { Serial.println("[FOTA] chunk number mismatch."); Update.abort(); return; }
+      if (num != n) { Serial.println("[FOTA] chunk number mismatch."); Update.end(false); return; }
 
       String ivHex2 = (const char*)cj["iv"];
       String macHex = (const char*)cj["mac"];
@@ -250,11 +274,11 @@ namespace FOTA {
       size_t maxOut = (dataB64.length() * 3) / 4 + 4;
       std::unique_ptr<uint8_t[]> cipher(new uint8_t[maxOut]);
       size_t cLen = b64decode(cipher.get(), dataB64);
-      if (!cLen) { Serial.println("[FOTA] b64 decode fail."); Update.abort(); return; }
+      if (!cLen) { Serial.println("[FOTA] b64 decode fail."); Update.end(false); return; }
 
       // Verify IV identical to manifest (or chunk IV if server varies)
       uint8_t ivc[16];
-      if (!hexToBytes(ivHex2, ivc, 16)) { Serial.println("[FOTA] bad iv hex."); Update.abort(); return; }
+      if (!hexToBytes(ivHex2, ivc, 16)) { Serial.println("[FOTA] bad iv hex."); Update.end(false); return; }
 
       // Verify HMAC: HMAC(K, n||iv||cipher)
       HMAC<SHA256> hmac;
@@ -266,17 +290,17 @@ namespace FOTA {
       uint8_t mac[32]; hmac.finalize(mac, sizeof(mac));
       String macCalc = b2hex(mac, 32);
       if (!macCalc.equalsIgnoreCase(macHex)) {
-        Serial.println("[FOTA] HMAC verify failed."); Update.abort(); return;
+        Serial.println("[FOTA] HMAC verify failed."); Update.end(false); return;
       }
 
       // Decrypt in place (CTR) — counterOffset = (chunk_bytes / 16) * n? We reset counter per chunk using chunk offset blocks.
       // We'll compute offset (blocks) = (n * chunkSize)/16
       uint32_t blockOffset = ( (uint64_t)n * (uint64_t)st.chunkSize ) / 16;
-      aesCtrXor(cipher.get(), cLen, ENC_KEY, ivc, blockOffset);
+      aesCtrXor(cipher.get(), cLen, AES_KEY, ivc, blockOffset);
 
       // Write plaintext to flash and to running SHA256
       size_t w = Update.write(cipher.get(), cLen);
-      if (w != cLen) { Serial.printf("[FOTA] Flash write fail: %s\n", Update.errorString()); Update.abort(); return; }
+      if (w != cLen) { Serial.printf("[FOTA] Flash write fail: %s\n", Update.getErrorString()); Update.end(false); return; }
       imgHash.update(cipher.get(), cLen);
 
       st.nextChunk = n + 1; saveState(st);
@@ -289,11 +313,11 @@ namespace FOTA {
     String sumHex = b2hex(sum, 32);
     if (!sumHex.equalsIgnoreCase(st.sha256)) {
       Serial.println("[FOTA] Final SHA256 mismatch → rollback.");
-      Update.abort(); clearState(); report(apiBase, "sha_fail", st.totalChunks, st.target); return;
+      Update.end(false); clearState(); report(apiBase, "sha_fail", st.totalChunks, st.target); return;
     }
 
     if (!Update.end(true)) {
-      Serial.printf("[FOTA] Update.end failed: %s\n", Update.errorString());
+      Serial.printf("[FOTA] Update.end failed: %s\n", Update.getErrorString());
       clearState(); return;
     }
 
