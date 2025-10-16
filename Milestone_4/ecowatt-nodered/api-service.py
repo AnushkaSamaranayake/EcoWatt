@@ -3,6 +3,8 @@ import requests
 import os, hashlib, hmac, secrets, math, base64
 from dotenv import load_dotenv
 from typing import Tuple
+from collections import defaultdict
+import time
 
 #Load environment variables from .env file
 load_dotenv()
@@ -20,10 +22,19 @@ API_KEYS = {
     "EcoWatt005" : os.getenv("API_KEY_5"),
     }
 
-    
+CONFIG_QUEUE = {}
+COMMANDS_QUEUE = defaultdict(list)
+
+def _device_id_from_path(device_id):
+    return device_id
+
+# ======= Frontend Server ========
+
 @app.route("/")
 def index():
     return "EcoWatt API Service is running"
+
+# ======= Cloud upload ==========
 
 @app.route("/api/ecowatt/cloud/upload", methods=["POST"])
 def uploadData():
@@ -93,6 +104,60 @@ def uploadData():
     except requests.exceptions.RequestException as e:
         print(f"Error sending data to Node-Red: {e}")
         return jsonify({"error": str(e)}), 500
+    
+# ============ Remote configuration ============
+
+@app.route("/device/<device_id>/config", methods=["GET"])
+def get_config(device_id):
+    did = _device_id_from_path(device_id)
+    cfg = CONFIG_QUEUE.pop(did, None)
+    if not cfg:
+        return ("", 204)
+    return jsonify({"config_update": cfg})
+
+@app.route("/device/<device_id>/config_ack", methods=["POST"])
+def post_config_ack(device_id):
+    did = _device_id_from_path(device_id)
+    print("CONFIG_ACK", did, request.json)
+    return jsonify({"ok": True})
+
+@app.route("/device/<device_id>/commands", methods=["GET"])
+def get_commands(device_id):
+    did = _device_id_from_path(device_id)
+    cmds = COMMANDS_QUEUE.get(did, [])
+    if not cmds:
+        return ("", 204)
+    # drain the queue
+    COMMANDS_QUEUE[did] = []
+    return jsonify(cmds)
+
+@app.route("/device/<device_id>/command_result", methods=["POST"])
+def post_command_result(device_id):
+    did = _device_id_from_path(device_id)
+    print("COMMAND_RESULT", did, request.json)
+    return jsonify({"ok": True})
+
+# --- Simple push helpers (curl these or wire to your UI) ---
+
+@app.route("/push_config/<device_id>", methods=["POST"])
+def push_config(device_id):
+    did = _device_id_from_path(device_id)
+    body = request.get_json(force=True)
+    # Expect exactly: {"config_update": {"sampling_interval":..., "registers":[...]}}
+    if not body or "config_update" not in body:
+        return jsonify({"error": "missing config_update"}), 400
+    CONFIG_QUEUE[did] = body["config_update"]
+    return jsonify({"queued": True})
+
+@app.route("/push_command/<device_id>", methods=["POST"])
+def push_command(device_id):
+    did = _device_id_from_path(device_id)
+    body = request.get_json(force=True)
+    # Expect exactly: {"command": {"action":"write_register", "target_register":"status_flag","value":1}}
+    if not body or "command" not in body:
+        return jsonify({"error": "missing command"}), 400
+    COMMANDS_QUEUE[did].append({"command": body["command"]})
+    return jsonify({"queued": True}) 
 
 #=============== FOTA update endpoint ===============
 
@@ -257,6 +322,8 @@ def report():
 def boot_ok():
     print("BOOT_OK:", request.json)
     return jsonify({"ok": True})
+
+
 
 
 if __name__ == "__main__":
