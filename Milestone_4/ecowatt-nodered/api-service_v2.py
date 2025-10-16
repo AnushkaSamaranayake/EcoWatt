@@ -297,9 +297,9 @@ ACTIVE_SHA256 = None
 TOTAL_CHUNKS = None
 
 def ensure_active_ready():
-    """Return False if firmware not initialized, instead of raising."""
+    """Return False if firmware not initialized instead of crashing."""
     if not (ACTIVE_VERSION and ACTIVE_PATH and ACTIVE_IV and ACTIVE_SHA256):
-        print("[FOTA] Manifest requested but no active firmware set.")
+        print("[FOTA] No active firmware set.")
         return False
     return True
 
@@ -390,7 +390,7 @@ def upload_firmware():
 @app.route("/manifest", methods=["GET"])
 def manifest():
     if not ensure_active_ready():
-        # 204 = No Content (or 200 with a small JSON marker if you prefer)
+        # No active firmware: return a 204 (no update)
         return jsonify({"status": "no_active_firmware"}), 204
     return jsonify({
         "version": ACTIVE_VERSION,
@@ -400,6 +400,7 @@ def manifest():
         "iv": ACTIVE_IV.hex(),
         "total_chunks": TOTAL_CHUNKS
     })
+
 
 def read_chunk(n:int)->bytes:
     with open(ACTIVE_PATH, "rb") as fw:
@@ -445,7 +446,17 @@ def report():
 
 @app.route("/boot_ok", methods=["POST"])
 def boot_ok():
+    global ACTIVE_VERSION, ACTIVE_PATH, ACTIVE_IV, ACTIVE_SHA256, TOTAL_CHUNKS
     print("BOOT_OK:", request.json)
+
+    # Mark firmware as consumed so other devices won't re-download
+    ACTIVE_VERSION = None
+    ACTIVE_PATH = None
+    ACTIVE_IV = None
+    ACTIVE_SHA256 = None
+    TOTAL_CHUNKS = None
+
+    print("[FOTA] Firmware cleared after successful update.")
     return jsonify({"ok": True})
 
 

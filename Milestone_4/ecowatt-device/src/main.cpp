@@ -7,6 +7,7 @@
 #include <LittleFS.h>
 #include "fota.h"
 #include "cloud_sync.h"
+#include "version_store.h"
 
 const char* WIFI_SSID     = "Anushka's Galaxy M12";
 const char* WIFI_PASSWORD = "12345678";
@@ -20,7 +21,7 @@ const char* API_KEY_1   = "EcowattUploadsMzo11quhRx40l6eqLV22BWvQ5ozk6iolLO60GaO
 
 // Replace with the PSK that matches Flask's API_KEYS
 // const char* DEVICE_PSK = "aa1c38aaa59b94ff2339060e298826e2"; 
-const char* URL_UPLOAD  = "http://10.109.27.251:5000/api/ecowatt/cloud/upload";
+const char* URL_UPLOAD  = "http://10.188.60.251:5000/api/ecowatt/cloud/upload";
 
 const char* API_BASE = "http://10.188.60.251:5000";
 
@@ -36,22 +37,31 @@ void connectWiFi() {
     Serial.print(".");
   }
   Serial.println("\nWiFi connected.");
-
-  if (WiFi.status() == WL_CONNECTED) {
-    FOTA::run(API_BASE,CURRENT_VERSION);
-  } else {
-    Serial.println("[FOTA] skipped (no WiFi)");
-  }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(100);
   LittleFS.begin();
-  connectWiFi();
-  buffer_init(256); // capacity (adjust)
 
-}
+  version_init();
+  String storedVersion = loadCurrentVersion();
+  if (storedVersion.length() == 0 || storedVersion == "\xFF") {
+    storedVersion = "1.0.0";
+    saveCurrentVersion(storedVersion.c_str());
+  }
+
+  connectWiFi();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    FOTA::run(API_BASE, storedVersion.c_str());
+  } else {
+    Serial.println("[FOTA] skipped (no WiFi)");
+  }
+
+  Serial.println("Setup started");
+  buffer_init(256); // capacity (adjust)
+} 
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {

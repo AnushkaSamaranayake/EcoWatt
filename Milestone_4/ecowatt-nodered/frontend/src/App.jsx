@@ -22,7 +22,7 @@ const App = () => {
   const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
 
   // API Base URL - adjust according to your setup
-  const API_BASE = 'http://10.109.27.251:5000'
+  const API_BASE = 'http://10.188.60.251:5000'
 
   // Fetch real inverter data from API
   const fetchInverterData = async () => {

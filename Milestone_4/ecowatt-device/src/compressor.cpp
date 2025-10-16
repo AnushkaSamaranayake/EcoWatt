@@ -6,7 +6,13 @@ static inline void write_be16(uint8_t* p, uint16_t v) {
 }
 
 size_t compress_delta_rle(const Sample* samples, size_t n, uint8_t* out_buf, size_t out_cap) {
-    if (n == 0 || out_cap < 6) return 0;
+    if (!samples || !out_buf || n == 0 || out_cap < 6) return 0;
+    
+    // Limit maximum samples to prevent excessive memory usage
+    if (n > 500) {
+      Serial.println("[WARN] Too many samples, limiting to 500");
+      n = 500;
+    }
 
     size_t pos = 0;
 

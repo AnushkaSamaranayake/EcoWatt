@@ -11,4 +11,6 @@ size_t buffer_count();
 size_t buffer_capacity();
 void buffer_drain_all(Sample* out_array, size_t& out_count); // copy & clear
 
+void buffer_clear(); // clear without reading
+
 #endif

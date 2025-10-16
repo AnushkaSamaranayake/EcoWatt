@@ -46,8 +46,18 @@ void acquireOnce() {
   unsigned long up_ms = cfg.upload_interval_s * 1000UL;
   if (now - lastUpload >= up_ms){
     lastUpload = now;
-    uint8_t workbuf[2048];
-    bool ok = finalize_and_upload(DEVICE_ID, (unsigned long)(lastUpload), workbuf, sizeof(workbuf));
+    
+    // Allocate work buffer on heap to prevent stack overflow
+    const size_t workbuf_size = 2048;
+    uint8_t* workbuf = (uint8_t*)malloc(workbuf_size);
+    if (!workbuf) {
+      Serial.println("[ERROR] Failed to allocate work buffer");
+      return;
+    }
+    
+    bool ok = finalize_and_upload(DEVICE_ID, (unsigned long)(lastUpload), workbuf, workbuf_size);
+    free(workbuf); // Always free the buffer
+    
     if (!ok) Serial.println("[UPLOAD] failed");
   }
 
