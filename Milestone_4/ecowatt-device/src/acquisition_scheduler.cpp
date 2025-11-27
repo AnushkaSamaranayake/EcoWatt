@@ -37,9 +37,9 @@ void acquireOnce() {
     float voltage = okV ? rawV / gainForRegister(0) : NAN;
     float current = okI ? rawI / gainForRegister(1) : NAN;
 
-    Sample s = { millis(), voltage, current };
-    bool ok = buffer_push(s);
-    if (!ok) Serial.println("[BUFFER] overflow!");
+  Sample s = { millis(), voltage, current };
+  bool ok = buffer_push_with_log(s);
+  if (!ok) Serial.println("[BUFFER] overflow!");
     else Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n", voltage, current, buffer_count());
   }
 

@@ -8,6 +8,8 @@
 #include "fota.h"
 #include "cloud_sync.h"
 #include "version_store.h"
+#include "power_manager.h"
+#include "fault_manager.h"
 
 const char* WIFI_SSID     = "Anushka's Galaxy M12";
 const char* WIFI_PASSWORD = "12345678";
@@ -44,6 +46,9 @@ void setup() {
   delay(100);
   LittleFS.begin();
 
+  fault_init();
+  power_init();
+
   version_init();
   String storedVersion = loadCurrentVersion();
   if (storedVersion.length() == 0 || storedVersion == "\xFF") {
@@ -68,4 +73,6 @@ void loop() {
     connectWiFi();
   }
   schedulerLoop();
+  // cooperative idle hint to reduce active CPU frequency briefly
+  power_idle_sleep_hint_ms(50);
 }

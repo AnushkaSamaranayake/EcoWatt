@@ -2,6 +2,7 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include "security.h"
+#include "fault_manager.h"
 
 // Config (defined in main)
 extern const char* URL_READ;
@@ -85,11 +86,18 @@ bool httpPostFrame(const char* url, const String& hexFrame, String& outFrameHex)
 
   String body = String("{\"frame\":\"") + hexFrame + "\"}";
   int code = http.POST(body);
-  if (code != 200) { http.end(); return false; }
+  if (code != 200) { 
+    http.end(); 
+    fault_log("http_post_fail", (String("code=") + String(code)).c_str());
+    return false; 
+  }
 
   String resp = http.getString();
   http.end();
   outFrameHex = extractFrameField(resp);
+  if (outFrameHex.length() == 0) {
+    fault_log("http_post_no_frame", resp.c_str());
+  }
   return (outFrameHex.length() > 0);
 }
 
@@ -114,24 +122,46 @@ bool decodeFirstRegister_U16(const String& hex, uint16_t& outVal) {
 // --- High-Level ---
 bool readRegisterU16(uint16_t reg, uint16_t qty, uint16_t& firstVal) {
   String tx = buildReadFrame(reg, qty);
-  // 🔹 Print the frame we are sending
   Serial.print(F("Read Frame -> "));
   Serial.println(tx);
   String rx;
-
-  // 🔹 Print the frame we received
-
-  if (!httpPostFrame(URL_READ, tx, rx)) return false;
-  if (isModbusException(rx)) return false;
-  Serial.print(F("Read Resp  <- "));
-  Serial.println(rx);
-  return decodeFirstRegister_U16(rx, firstVal);
+  const int MAX_ATTEMPTS = 3;
+  int attempt = 0;
+  while (attempt < MAX_ATTEMPTS) {
+    attempt++;
+    if (!httpPostFrame(URL_READ, tx, rx)) {
+      fault_log("read_http_fail", (String("attempt=") + String(attempt)).c_str());
+      delay(100 * attempt); // small backoff
+      continue;
+    }
+    if (isModbusException(rx)) {
+      uint8_t ex = modbusExceptionCode(rx);
+      fault_log("modbus_exception", (String("code=") + String(ex)).c_str());
+      return false;
+    }
+    Serial.print(F("Read Resp  <- "));
+    Serial.println(rx);
+    return decodeFirstRegister_U16(rx, firstVal);
+  }
+  return false;
 }
 
 bool writeSingleRegister(uint16_t reg, uint16_t value) {
   String tx = buildWriteSingleFrame(reg, value);
   String rx;
-  if (!httpPostFrame(URL_WRITE, tx, rx)) return false;
-  if (isModbusException(rx)) return false;
-  return true;
+  const int MAX_ATTEMPTS = 3;
+  for (int a=1;a<=MAX_ATTEMPTS;a++){
+    if (!httpPostFrame(URL_WRITE, tx, rx)){
+      fault_log("write_http_fail", (String("attempt=") + String(a)).c_str());
+      delay(100 * a);
+      continue;
+    }
+    if (isModbusException(rx)){
+      uint8_t ex = modbusExceptionCode(rx);
+      fault_log("modbus_exception", (String("code=") + String(ex)).c_str());
+      return false;
+    }
+    return true;
+  }
+  return false;
 }

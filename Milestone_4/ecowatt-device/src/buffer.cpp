@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "fault_manager.h"
 
 // Ring buffer storage for samples
 static Sample* ring = nullptr;   // Pointer to dynamically allocated array of Sample objects
@@ -44,6 +45,14 @@ bool buffer_push(const Sample& s) {
   size_t idx = (head + count) % cap; // Compute next insertion index in circular buffer
   ring[idx] = s; // Copy sample into buffer
   count++;       // Increase number of items
+  return true;
+}
+
+bool buffer_push_with_log(const Sample& s){
+  if (!buffer_push(s)){
+    fault_log("buffer_overflow","push failed: full or uninitialized");
+    return false;
+  }
   return true;
 }
 
