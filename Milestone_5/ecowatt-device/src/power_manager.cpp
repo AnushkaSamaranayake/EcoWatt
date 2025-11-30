@@ -7,6 +7,9 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266WiFiAP.h>
 #include <ESP.h>
+extern "C" {
+  #include "user_interface.h"
+}
 #endif
 
 void power_init(){
@@ -15,9 +18,10 @@ void power_init(){
 
 void power_set_cpu_freq(uint8_t mhz){
 #ifdef ESP8266
-  if (mhz==80 || mhz==160) {
-    // prefer Arduino wrapper
-    ESP.setCpuFreqMHz(mhz);
+  if (mhz==80) {
+    system_update_cpu_freq(SYS_CPU_80MHZ);
+  } else if (mhz==160) {
+    system_update_cpu_freq(SYS_CPU_160MHZ);
   }
 #endif
 }
@@ -27,11 +31,11 @@ void power_idle_sleep_hint_ms(uint32_t ms){
 #ifdef ESP8266
   if (ms >= 200) {
     // drop to 80 MHz briefly to save power
-    uint8_t cur = ESP.getCpuFreqMHz();
-    if (cur > 80) ESP.setCpuFreqMHz(80);
+    uint8_t cur = system_get_cpu_freq();
+    if (cur > 80) system_update_cpu_freq(SYS_CPU_80MHZ);
     delay(ms);
     // restore to 160 if needed
-    if (cur > 80) ESP.setCpuFreqMHz(cur);
+    if (cur > 80) system_update_cpu_freq(SYS_CPU_160MHZ);
   } else {
     // short hint: just delay
     delay(ms);
