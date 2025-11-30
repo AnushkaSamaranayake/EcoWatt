@@ -13,21 +13,33 @@ void fault_init(){
 }
 
 void fault_log(const char* code, const char* details){
+  // Use new typed version with automatic classification
+  ErrorType type = classify_error(code);
+  fault_log_typed(code, details, type);
+}
+
+void fault_log_typed(const char* code, const char* details, ErrorType type){
   uint32_t now = millis();
   FaultEvent e;
   e.ts_ms = now;
+  e.error_type = type;
   strncpy(e.code, code, sizeof(e.code)-1); e.code[sizeof(e.code)-1]=0;
   strncpy(e.details, details, sizeof(e.details)-1); e.details[sizeof(e.details)-1]=0;
+
+  // Log to serial with error type
+  Serial.printf("[FAULT] %s (%s): %s\n", e.code, error_type_to_string(type), e.details);
 
   // store in circular buffer
   size_t idx = (ev_head + ev_count) % (sizeof(events)/sizeof(events[0]));
   events[idx] = e;
-  if (ev_count < (sizeof(events)/sizeof(events[0]))) ev_count++; else ev_head = (ev_head+1) % (sizeof(events)/sizeof(events[0]));
+  if (ev_count < (sizeof(events)/sizeof(events[0]))) ev_count++; 
+  else ev_head = (ev_head+1) % (sizeof(events)/sizeof(events[0]));
 
-  // also append to file for persistence
+  // also append to file for persistence with type
   File f = LittleFS.open("/fault_log.txt", "a");
   if (f) {
-    f.printf("%lu,%s,%s\n", (unsigned long)e.ts_ms, e.code, e.details);
+    f.printf("%lu,%s,%s,%s\n", (unsigned long)e.ts_ms, e.code, 
+             error_type_to_string(type), e.details);
     f.close();
   }
 }
@@ -43,4 +55,47 @@ size_t fault_get_recent(FaultEvent* out, size_t max_items){
 
 void fault_persist(){
   // Already appended during logging; this is a noop but kept for API completeness
+}
+
+// ============ Error Classification Helpers ============
+
+ErrorType classify_error(const char* code) {
+  if (strstr(code, "http")) return ErrorType::HTTP_FAIL;
+  if (strstr(code, "modbus_exception")) return ErrorType::MODBUS_EXCEPTION;
+  if (strstr(code, "crc")) return ErrorType::CRC_ERROR;
+  if (strstr(code, "corrupt")) return ErrorType::CORRUPT_FRAME;
+  if (strstr(code, "timeout")) return ErrorType::TIMEOUT;
+  if (strstr(code, "packet_drop") || strstr(code, "empty_frame")) return ErrorType::PACKET_DROP;
+  return ErrorType::UNKNOWN;
+}
+
+bool is_retryable_error(ErrorType type) {
+  switch (type) {
+    case ErrorType::HTTP_FAIL:
+    case ErrorType::TIMEOUT:
+    case ErrorType::PACKET_DROP:
+      return true;  // These errors should be retried
+    
+    case ErrorType::MODBUS_EXCEPTION:
+    case ErrorType::CRC_ERROR:
+    case ErrorType::CORRUPT_FRAME:
+      return false;  // These indicate data integrity issues, don't retry
+    
+    default:
+      return false;
+  }
+}
+
+const char* error_type_to_string(ErrorType type) {
+  switch (type) {
+    case ErrorType::NONE: return "NONE";
+    case ErrorType::HTTP_FAIL: return "HTTP_FAIL";
+    case ErrorType::MODBUS_EXCEPTION: return "MODBUS_EXCEPTION";
+    case ErrorType::CRC_ERROR: return "CRC_ERROR";
+    case ErrorType::CORRUPT_FRAME: return "CORRUPT_FRAME";
+    case ErrorType::TIMEOUT: return "TIMEOUT";
+    case ErrorType::PACKET_DROP: return "PACKET_DROP";
+    case ErrorType::UNKNOWN: return "UNKNOWN";
+    default: return "INVALID";
+  }
 }
