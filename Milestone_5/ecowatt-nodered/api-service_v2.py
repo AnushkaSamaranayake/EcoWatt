@@ -40,6 +40,13 @@ API_KEYS = {
 CONFIG_QUEUE = {}
 COMMANDS_QUEUE = defaultdict(list)
 
+# ============ Error Flag System ============
+# InverterSim API endpoint for error injection
+INVERTER_SIM_BASE_URL = "http://20.15.114.131:8080"
+
+# Store error injection history for UI display (optional)
+ERROR_INJECTION_HISTORY = []
+
 def _device_id_from_path(device_id):
     return device_id
 
@@ -244,6 +251,8 @@ def post_config_ack(device_id):
 @app.route("/device/<device_id>/commands", methods=["GET"])
 def get_commands(device_id):
     did = _device_id_from_path(device_id)
+    
+    # Return normal queued commands
     cmds = COMMANDS_QUEUE.get(did, [])
     if not cmds:
         return ("", 204)
@@ -296,6 +305,143 @@ def debug_commands_queue():
 def debug_data_store():
     """Debug endpoint to see stored inverter data"""
     return jsonify({device: data[-5:] for device, data in INVERTER_DATA_STORE.items()})  # Last 5 entries per device 
+
+# ============ Error Flag API Endpoints ============
+
+@app.route("/api/error-flag/add", methods=["POST"])
+def add_error_flag():
+    """
+    Add Error Flag API - Proxies request to InverterSim
+    InverterSim will send corrupted/error frames to the device
+    Device will naturally detect and log the errors
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing request body"}), 400
+    
+    device_id = data.get("device_id")
+    error_type = data.get("errorType")
+    
+    if not device_id or not error_type:
+        return jsonify({"error": "Missing device_id or errorType"}), 400
+    
+    # Validate error type
+    valid_types = ["EXCEPTION", "CRC_ERROR", "CORRUPT", "PACKET_DROP", "DELAY"]
+    if error_type not in valid_types:
+        return jsonify({"error": f"Invalid errorType. Must be one of: {valid_types}"}), 400
+    
+    # Prepare payload for InverterSim (no device_id needed)
+    inverter_payload = {
+        "errorType": error_type,
+        "exceptionCode": data.get("exceptionCode", 0),
+        "delayMs": data.get("delayMs", 0)
+    }
+    
+    try:
+        # Call InverterSim API
+        inverter_url = f"{INVERTER_SIM_BASE_URL}/api/user/error-flag/add"
+        response = requests.post(
+            inverter_url,
+            json=inverter_payload,
+            timeout=5
+        )
+        
+        # Log the injection for history
+        ERROR_INJECTION_HISTORY.append({
+            "device_id": device_id,
+            "errorType": error_type,
+            "exceptionCode": data.get("exceptionCode", 0),
+            "delayMs": data.get("delayMs", 0),
+            "timestamp": datetime.now().isoformat(),
+            "inverter_sim_status": response.status_code
+        })
+        
+        # Keep only last 100 entries
+        if len(ERROR_INJECTION_HISTORY) > 100:
+            ERROR_INJECTION_HISTORY.pop(0)
+        
+        if response.status_code == 200:
+            return jsonify({
+                "status": "success",
+                "message": f"InverterSim will send {error_type} error frame to device {device_id}",
+                "device_id": device_id,
+                "errorType": error_type,
+                "inverter_sim_response": response.json() if response.content else None
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "InverterSim returned error",
+                "inverter_sim_status": response.status_code,
+                "inverter_sim_response": response.text
+            }), 502
+            
+    except requests.exceptions.Timeout:
+        return jsonify({
+            "status": "error",
+            "message": "InverterSim request timed out"
+        }), 504
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            "status": "error",
+            "message": f"Could not connect to InverterSim at {INVERTER_SIM_BASE_URL}"
+        }), 503
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to contact InverterSim: {str(e)}"
+        }), 500
+
+@app.route("/api/error-flag/status", methods=["GET"])
+def error_flag_status():
+    """Get error injection history"""
+    return jsonify({
+        "history": ERROR_INJECTION_HISTORY[-10:],  # Last 10 injections
+        "count": len(ERROR_INJECTION_HISTORY),
+        "inverter_sim_url": INVERTER_SIM_BASE_URL
+    })
+
+@app.route("/api/error-flag/status/<device_id>", methods=["GET"])
+def error_flag_status_device(device_id):
+    """Get error injection history for a specific device"""
+    device_history = [h for h in ERROR_INJECTION_HISTORY if h.get("device_id") == device_id]
+    return jsonify({
+        "device_id": device_id,
+        "history": device_history[-10:],  # Last 10 for this device
+        "count": len(device_history)
+    })
+
+@app.route("/api/error-flag/clear/<device_id>", methods=["POST"])
+def clear_error_flag(device_id):
+    """Clear error injection history for a specific device"""
+    global ERROR_INJECTION_HISTORY
+    original_count = len(ERROR_INJECTION_HISTORY)
+    ERROR_INJECTION_HISTORY = [h for h in ERROR_INJECTION_HISTORY if h.get("device_id") != device_id]
+    cleared = original_count - len(ERROR_INJECTION_HISTORY)
+    return jsonify({
+        "status": "success",
+        "message": f"Cleared {cleared} history entries for {device_id}"
+    })
+
+@app.route("/api/error-flag/clear-all", methods=["POST"])
+def clear_all_error_flags():
+    """Clear all error injection history"""
+    count = len(ERROR_INJECTION_HISTORY)
+    ERROR_INJECTION_HISTORY.clear()
+    return jsonify({"status": "success", "message": f"Cleared {count} history entries"})
+
+@app.route("/api/fault-logs/<device_id>", methods=["GET"])
+def get_fault_logs(device_id):
+    """
+    Get fault logs for a device (when device uploads them)
+    This is a placeholder - actual implementation would store logs from device
+    """
+    # This would be populated when device uploads fault logs
+    return jsonify({
+        "device_id": device_id,
+        "logs": [],
+        "message": "Fault logs endpoint ready. Device needs to implement log upload."
+    })
 
 #=============== FOTA update endpoint ===============
 

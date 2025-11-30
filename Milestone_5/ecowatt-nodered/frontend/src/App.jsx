@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import ErrorInjectionPanel from './components/ErrorInjectionPanel'
+import ErrorEmulationTester from './components/ErrorEmulationTester'
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('inverter')
@@ -357,6 +359,8 @@ const App = () => {
           {[
             { id: 'inverter', label: 'Inverter Data' },
             { id: 'config', label: 'Configuration' },
+            { id: 'error-test', label: 'Error Testing' },
+            { id: 'error-emulation', label: 'Error Emulation' },
             { id: 'fota', label: 'FOTA Upload' }
           ].map(tab => (
             <button
@@ -591,10 +595,20 @@ const App = () => {
           </div>
         )}
 
+        {/* Error Testing Tab */}
+        {activeTab === 'error-test' && (
+          <ErrorInjectionPanel apiBase={API_BASE} selectedDevice={selectedDevice} />
+        )}
+
+        {/* Error Emulation Tab */}
+        {activeTab === 'error-emulation' && (
+          <ErrorEmulationTester />
+        )}
+
         {/* FOTA Upload Tab */}
         {activeTab === 'fota' && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Firmware Over The Air (FOTA) Update</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Firmware Over-The-Air (FOTA) Upload</h2>
             
             <div className="space-y-4">
               <div>
