@@ -1,0 +1,12 @@
+{
+  "name": "ecowatt-nodered",
+  "version": "1.0.0",
+  "description": "EcoWatt Device Cloud API with Node-RED",
+  "main": "index.js",
+  "scripts": {
+    "start": "node-red -u . flows.json --settings settings.js -p $PORT"
+  },
+  "dependencies": {
+    "node-red": "latest"
+  }
+}
