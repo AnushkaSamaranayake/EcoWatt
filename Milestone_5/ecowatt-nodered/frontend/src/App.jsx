@@ -24,7 +24,7 @@ const App = () => {
   const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
 
   // API Base URL - adjust according to your setup
-  const API_BASE = 'http://10.188.60.251:5000'
+  const API_BASE = 'http://10.28.177.230:5000'
 
   // Preset configurations for easy testing
   const presetConfigs = {
