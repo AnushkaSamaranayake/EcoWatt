@@ -1,4 +1,5 @@
-import React, { useState, useEffect, use } from 'react'
+import React, { useState, useEffect } from 'react'
+
 import ErrorInjectionPanel from './components/ErrorInjectionPanel'
 import ErrorEmulationTester from './components/ErrorEmulationTester'
 
@@ -23,13 +24,7 @@ const App = () => {
 
   // const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
 
-  const [devices, setDevices] = useState([]);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/inverters`)
-      .then(res => res.json())
-      .then(data => setDevices(data.map(d => d.device_id)));
-  }, []);
+  const devices = ['EcoWatt001']
 
   // API Base URL - adjust according to your setup
   const API_BASE = 'http://10.28.177.230:5000'
@@ -103,21 +98,21 @@ const App = () => {
   // Send configuration to device
   const sendConfiguration = async () => {
     setLoading(true)
+    console.log('Sending configuration (raw UI data):', configData)
+    console.log('To device:', selectedDevice)
 
-    console.log("Original UI configData:", configData)
+    // 1) Transform UI register objects → array of strings for firmware
+    const registerNames = configData.registers.map(reg => reg.name).filter(Boolean)
 
-    //Transform UI register objects → string list for ESP
-    const registerNames = configData.registers.map(reg => reg.name)
-
-    //Add missing device-required fields
+    // 2) Build the exact config that the ESP expects
     const deviceConfig = {
       sampling_interval: configData.sampling_interval,
-      upload_interval: 15,       // default required by device
-      max_buffer_size: 256,      // default required by device
-      registers: registerNames    // ["voltage", "current"]
+      upload_interval: 15,        // you can change these defaults later via UI if needed
+      max_buffer_size: 256,
+      registers: registerNames    // e.g. ["voltage", "current"]
     }
 
-    console.log("Transformed Config for Device:", deviceConfig)
+    console.log('Transformed config for device:', deviceConfig)
 
     try {
       const payload = {
@@ -129,24 +124,25 @@ const App = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
-      const result = await response.text()
-      console.log('Response:', result)
+      const resultText = await response.text()
+      console.log('Config push response:', resultText)
 
       if (response.ok) {
         alert(`Configuration sent successfully!`)
       } else {
-        alert(`Failed to send config: ${response.status}`)
+        alert(`Failed to send configuration. Status: ${response.status}, Response: ${resultText}`)
       }
     } catch (error) {
-      console.error("Error sending config:", error)
-      alert("Config send error: " + error.message)
+      console.error('Error sending configuration:', error)
+      alert(`Error sending configuration: ${error.message}`)
     }
 
     setLoading(false)
   }
+
 
 
   // Send command to device
