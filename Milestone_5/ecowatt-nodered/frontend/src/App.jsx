@@ -452,11 +452,19 @@ const App = () => {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span>Voltage:</span>
-                        <span className="font-medium">{device.voltage} V</span>
+                        <span className="font-medium">
+                          {Array.isArray(device.voltage)
+                            ? device.voltage[device.voltage.length - 1]
+                            : device.voltage} V
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Current:</span>
-                        <span className="font-medium">{device.current} A</span>
+                        <span className="font-medium">
+                          {Array.isArray(device.current)
+                          ? device.current[device.current.length - 1]
+                          : device.current} A
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Power:</span>
