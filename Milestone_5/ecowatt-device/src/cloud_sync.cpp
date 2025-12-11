@@ -30,48 +30,50 @@ static bool http_post_json(const String& url, const String& body) {
 }
 
 void cloud_sync_cycle() {
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char buf[18];
-    sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
-    String device_id = String(buf);
 
-  // ======== 1. Fetch config update ========
+    // ALWAYS USE FIXED DEVICE ID (must match backend/UI)
+    String device_id = "EcoWatt001";
+
+    // ======== 1. Fetch config update ========
     String cfg_json;
     String cfg_url = String(API_BASE) + "/device/" + device_id + "/config";
     if (http_get_json(cfg_url, cfg_json)) {
         Serial.println("[CLOUD] Config JSON received:");
         Serial.println(cfg_json);
+
         String accepted_json, rejected_json;
         bool ok = config_stage_from_json(cfg_json, accepted_json, rejected_json);
-        String ack = config_build_ack_json();
+
+        String ack     = config_build_ack_json();
         String ack_url = String(API_BASE) + "/device/" + device_id + "/config_ack";
         http_post_json(ack_url, ack);
+
         if (ok) {
-        Serial.println("[CLOUD] Staged config, will apply next cycle");
+            Serial.println("[CLOUD] Staged config, will apply next cycle");
         } else {
-        Serial.println("[CLOUD] Config rejected");
-        Serial.println(rejected_json);
+            Serial.println("[CLOUD] Config rejected:");
+            Serial.println(rejected_json);
         }
     }
 
-  // ======== 2. Fetch commands ========
+    // ======== 2. Fetch commands ========
     String cmd_url = String(API_BASE) + "/device/" + device_id + "/commands";
     String cmd_json;
     if (http_get_json(cmd_url, cmd_json)) {
         Serial.println("[CLOUD] Command JSON received:");
         Serial.println(cmd_json);
+
         CommandResult r;
         if (command_process_response_json(cmd_json, r)) {
-        String res = command_result_to_json(r);
-        String res_url = String(API_BASE) + "/device/" + device_id + "/command_result";
-        http_post_json(res_url, res);
-        Serial.println("[CLOUD] Command executed and reported");
+            String res     = command_result_to_json(r);
+            String res_url = String(API_BASE) + "/device/" + device_id + "/command_result";
+            http_post_json(res_url, res);
+            Serial.println("[CLOUD] Command executed and reported");
         } else {
-        Serial.println("[CLOUD] No valid command in JSON");
+            Serial.println("[CLOUD] No valid command in JSON");
         }
     }
 
-  // ======== 3. Apply staged config ========
-  config_apply_staged();  // activates staged config now that upload finished
+    // ======== 3. Apply staged config ========
+    config_apply_staged();
 }
