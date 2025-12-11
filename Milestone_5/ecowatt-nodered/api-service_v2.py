@@ -238,15 +238,30 @@ def uploadData():
 def get_config(device_id):
     did = _device_id_from_path(device_id)
     cfg = CONFIG_QUEUE.pop(did, None)
-    if not cfg:
-        return ("", 204)
-    return jsonify({"config_update": cfg})
+
+    if cfg:
+        print("\n====== [DEVICE_PULL_CONFIG] ======")
+        print(f"Device: {did}")
+        print("Delivered config_update:")
+        print(json.dumps(cfg, indent=4))
+        print("==================================\n")
+        return jsonify({"config_update": cfg})
+
+    print(f"[DEVICE_PULL_CONFIG] {did}: No config pending")
+    return ("", 204)
 
 @app.route("/device/<device_id>/config_ack", methods=["POST"])
 def post_config_ack(device_id):
     did = _device_id_from_path(device_id)
-    print("CONFIG_ACK", did, request.json)
+    
+    print("\n========== [CONFIG_ACK] ==========")
+    print(f"Device: {did}")
+    print("ACK JSON:")
+    print(json.dumps(request.json, indent=4))
+    print("===================================\n")
+
     return jsonify({"ok": True})
+
 
 @app.route("/device/<device_id>/commands", methods=["GET"])
 def get_commands(device_id):
@@ -273,11 +288,40 @@ def post_command_result(device_id):
 def push_config(device_id):
     did = _device_id_from_path(device_id)
     body = request.get_json(force=True)
-    # Expect exactly: {"config_update": {"sampling_interval":..., "registers":[...]}}
-    if not body or "config_update" not in body:
+
+    # Validate input
+    cfg = body.get("config_update")
+    if not cfg:
         return jsonify({"error": "missing config_update"}), 400
-    CONFIG_QUEUE[did] = body["config_update"]
+
+    # Transform registers from UI format (numbers or whatever) to strings expected by ESP
+    register_map = {
+        0: "voltage",
+        1: "current",
+        2: "frequency"
+    }
+
+    reg_in = cfg.get("registers", [])
+    reg_out = []
+
+    for r in reg_in:
+        # If a number is sent
+        if isinstance(r, int) and r in register_map:
+            reg_out.append(register_map[r])
+        # If UI already sends strings
+        elif isinstance(r, str):
+            reg_out.append(r)
+
+    cfg["registers"] = reg_out  # corrected format
+
+    CONFIG_QUEUE[did] = cfg
+
+    print("\n[PUSH_CONFIG] Queued config for", did)
+    print(json.dumps(cfg, indent=4))
+
     return jsonify({"queued": True})
+
+
 
 @app.route("/push_command/<device_id>", methods=["POST"])
 def push_command(device_id):
