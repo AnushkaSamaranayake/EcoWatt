@@ -10,6 +10,7 @@
 #include "version_store.h"
 #include "power_manager.h"
 #include "fault_manager.h"
+#include "config.h"
 
 const char* WIFI_SSID     = "Anushka's Galaxy M12";
 const char* WIFI_PASSWORD = "12345678";
@@ -48,6 +49,7 @@ void setup() {
 
   fault_init();
   power_init();
+  config_init();
 
   version_init();
   String storedVersion = loadCurrentVersion();

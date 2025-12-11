@@ -3,6 +3,7 @@
 #include "buffer.h"
 #include "packetizer.h"
 #include "config.h"
+#include "config_filter.h"
 #include <Arduino.h>
 
 
@@ -30,13 +31,37 @@ void acquireOnce() {
   unsigned long now = millis();
   if (now - lastPoll >= poll_ms) {
     lastPoll = now;
-    uint16_t rawV = 0, rawI = 0;
-    bool okV = readRegisterU16(0x0000, 0x0001, rawV);
-    bool okI = readRegisterU16(0x0001, 0x0001, rawI);
+    //uint16_t rawV = 0, rawI = 0;
+    //bool okV = readRegisterU16(0x0000, 0x0001, rawV);
+    //bool okI = readRegisterU16(0x0001, 0x0001, rawI);
 
-    float voltage = okV ? rawV / gainForRegister(0) : NAN;
-    float current = okI ? rawI / gainForRegister(1) : NAN;
+    //float voltage = okV ? rawV / gainForRegister(0) : NAN;
+    //float current = okI ? rawI / gainForRegister(1) : NAN;
+    float voltage = NAN;
+    float current = NAN;
 
+    // --- Voltage (register 0x0000) ---
+    if (should_read_voltage()) {
+      uint16_t rawV = 0;
+      bool okV = readRegisterU16(0x0000, 0x0001, rawV);
+      if (okV) {
+        voltage = rawV / gainForRegister(0);
+      } else {
+        voltage = NAN;
+      }
+    }
+
+    // --- Current (register 0x0001) ---
+    if (should_read_current()) {
+      uint16_t rawI = 0;
+      bool okI = readRegisterU16(0x0001, 0x0001, rawI);
+      if (okI) {
+        current = rawI / gainForRegister(1);
+      } else {
+        current = NAN;
+      }
+    }
+    
   Sample s = { millis(), voltage, current };
   bool ok = buffer_push_with_log(s);
   if (!ok) Serial.println("[BUFFER] overflow!");

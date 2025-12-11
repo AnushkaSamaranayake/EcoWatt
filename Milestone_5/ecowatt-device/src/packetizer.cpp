@@ -6,6 +6,7 @@
 #include "security.h"
 #include <ArduinoJson.h>
 #include "cloud_sync.h"
+#include "config_filter.h"
 
 #include <base64.h> // if using base64 lib; otherwise implement simple base64
 
@@ -76,17 +77,22 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   size_t max_samples = min(out_n, (size_t)50); // Limit to 50 samples max
   
   body += ",\"voltage\":[";
-  for (size_t i = 0; i < max_samples; i++){
-    body += String(samples[i].voltage / 1.0, 2); // 2 decimal places
-    if (i < max_samples - 1) body += ",";
+  if(should_read_voltage()) {
+    for (size_t i = 0; i < max_samples; i++){
+      body += String(samples[i].voltage / 1.0, 2); // 2 decimal places
+      if (i < max_samples - 1) body += ",";
+    }
   }
   body += "]";
 
   body += ",\"current\":[";
-  for (size_t i = 0; i < max_samples; i++){
-    body += String(samples[i].current / 10.0, 2); // 2 decimal places  
-    if (i < max_samples - 1) body += ",";
+  if(should_read_current()) {
+    for (size_t i = 0; i < max_samples; i++){
+        body += String(samples[i].current / 10.0, 2); // 2 decimal places  
+        if (i < max_samples - 1) body += ",";
+    }
   }
+  
   body += "]";
 
   body += "}";
