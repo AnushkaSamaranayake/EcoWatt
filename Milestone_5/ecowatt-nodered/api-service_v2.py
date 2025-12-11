@@ -321,8 +321,6 @@ def push_config(device_id):
 
     return jsonify({"queued": True})
 
-
-
 @app.route("/push_command/<device_id>", methods=["POST"])
 def push_command(device_id):
     did = _device_id_from_path(device_id)

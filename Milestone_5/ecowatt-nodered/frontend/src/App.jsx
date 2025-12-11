@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react'
-
+import React, { useState, useEffect, use } from 'react'
 import ErrorInjectionPanel from './components/ErrorInjectionPanel'
 import ErrorEmulationTester from './components/ErrorEmulationTester'
 
@@ -24,7 +23,15 @@ const App = () => {
 
   // const devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
 
-  const devices = ['EcoWatt001']
+  const [devices, setDevices] = useState([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/inverters`)
+      .then(res => res.json())
+      .then(data => setDevices(data.map(d => d.device_id)));
+  }, []);
+
+  const [commandResult, setCommandResult] = useState([]);
 
   // API Base URL - adjust according to your setup
   const API_BASE = 'http://10.28.177.230:5000'
@@ -51,11 +58,8 @@ const App = () => {
 
   // Preset commands for easy testing
   const presetCommands = {
-    'Enable Device': { action: 'write_register', target_register: 'status_flag', value: '1' },
-    'Disable Device': { action: 'write_register', target_register: 'status_flag', value: '0' },
-    'Set Power Limit': { action: 'write_register', target_register: 'power_limit', value: '1000' },
-    'Reset Device': { action: 'reset', target_register: '', value: '' },
-    'Read Status': { action: 'read_register', target_register: 'status_flag', value: '' }
+    'Export power 50%': { action: 'write_register', target_register: 'status_flag', value: '50' },
+    'Export power 100%': { action: 'write_register', target_register: 'status_flag', value: '100' },
   }
 
   // Fetch real inverter data from API
@@ -98,21 +102,21 @@ const App = () => {
   // Send configuration to device
   const sendConfiguration = async () => {
     setLoading(true)
-    console.log('Sending configuration (raw UI data):', configData)
-    console.log('To device:', selectedDevice)
 
-    // 1) Transform UI register objects → array of strings for firmware
-    const registerNames = configData.registers.map(reg => reg.name).filter(Boolean)
+    console.log("Original UI configData:", configData)
 
-    // 2) Build the exact config that the ESP expects
+    //Transform UI register objects → string list for ESP
+    const registerNames = configData.registers.map(reg => reg.name)
+
+    //Add missing device-required fields
     const deviceConfig = {
       sampling_interval: configData.sampling_interval,
-      upload_interval: 15,        // you can change these defaults later via UI if needed
-      max_buffer_size: 256,
-      registers: registerNames    // e.g. ["voltage", "current"]
+      upload_interval: 15,       // default required by device
+      max_buffer_size: 256,      // default required by device
+      registers: registerNames    // ["voltage", "current"]
     }
 
-    console.log('Transformed config for device:', deviceConfig)
+    console.log("Transformed Config for Device:", deviceConfig)
 
     try {
       const payload = {
@@ -124,25 +128,24 @@ const App = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       })
 
-      const resultText = await response.text()
-      console.log('Config push response:', resultText)
+      const result = await response.text()
+      console.log('Response:', result)
 
       if (response.ok) {
         alert(`Configuration sent successfully!`)
       } else {
-        alert(`Failed to send configuration. Status: ${response.status}, Response: ${resultText}`)
+        alert(`Failed to send config: ${response.status}`)
       }
     } catch (error) {
-      console.error('Error sending configuration:', error)
-      alert(`Error sending configuration: ${error.message}`)
+      console.error("Error sending config:", error)
+      alert("Config send error: " + error.message)
     }
 
     setLoading(false)
   }
-
 
 
   // Send command to device
@@ -183,6 +186,19 @@ const App = () => {
       alert(`Error sending command: ${error.message}`)
     }
     setLoading(false)
+  }
+
+  //Fetch command result for display
+  const fetchCommandResult = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/debug/command_results/${selectedDevice}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCommandResult(data);
+      }
+    } catch (error) {
+      console.error('Error fetching command result:', error)
+    }
   }
 
   // Load preset configuration
@@ -321,6 +337,14 @@ const App = () => {
     const interval = setInterval(fetchInverterData, 30000) // Refresh every 30 seconds
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'config') {
+      fetchCommandResult();
+      const interval = setInterval(fetchCommandResult, 3000); // Refresh every 3 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedDevice]);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -609,6 +633,30 @@ const App = () => {
               >
                 {loading ? 'Sending...' : 'Send Command'}
               </button>
+              {/* Command Results History */}
+              <div className="mt-6 bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-800 mb-2">Command Acknowledgements</h3>
+
+                {commandResult.length === 0 ? (
+                  <p className="text-sm text-gray-500">No command responses yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {commandResult.map((res, idx) => (
+                      <div key={idx} className="border rounded p-3 bg-white shadow-sm">
+                        <div className="text-sm">
+                          <strong>Status:</strong> {res.command_result?.status}
+                        </div>
+                        <div className="text-sm">
+                          <strong>Details:</strong> {res.command_result?.details}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Executed at: {res.command_result?.executed_at}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
