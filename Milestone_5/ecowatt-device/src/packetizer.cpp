@@ -77,7 +77,7 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   
   body += ",\"voltage\":[";
   for (size_t i = 0; i < max_samples; i++){
-    body += String(samples[i].voltage / 10.0, 2); // 2 decimal places
+    body += String(samples[i].voltage / 1.0, 2); // 2 decimal places
     if (i < max_samples - 1) body += ",";
   }
   body += "]";
