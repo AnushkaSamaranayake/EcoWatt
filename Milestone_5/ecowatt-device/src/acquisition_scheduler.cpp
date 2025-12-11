@@ -20,33 +20,58 @@ float gainForRegister(uint16_t reg) {
   }
 }
 
-
-
-
-
 void acquireOnce() {
   AppConfig cfg = config_get_active();
   unsigned long poll_ms = cfg.sampling_interval_s * 1000UL;
   unsigned long now = millis();
+
+  // Decode register mask from config:
+  // bit0 = voltage, bit1 = current, bit2 = frequency (not implemented yet)
+  uint8_t mask = cfg.register_mask;
+  bool wantV = (mask & (1 << 0)) != 0;
+  bool wantI = (mask & (1 << 1)) != 0;
+
+  // If nothing is requested, skip sampling altogether
+  if (!wantV && !wantI) {
+    // Optional log
+    // Serial.println("[ACQ] register_mask=0, skipping sampling");
+  }
+
   if (now - lastPoll >= poll_ms) {
     lastPoll = now;
+
     uint16_t rawV = 0, rawI = 0;
-    bool okV = readRegisterU16(0x0000, 0x0001, rawV);
-    bool okI = readRegisterU16(0x0001, 0x0001, rawI);
+    bool okV = false;
+    bool okI = false;
 
-    float voltage = okV ? rawV / gainForRegister(0) : NAN;
-    float current = okI ? rawI / gainForRegister(1) : NAN;
+    // Only read Modbus registers that are enabled in the mask
+    if (wantV) {
+      okV = readRegisterU16(0x0000, 0x0001, rawV);   // voltage reg
+    }
+    if (wantI) {
+      okI = readRegisterU16(0x0001, 0x0001, rawI);   // current reg
+    }
 
-  Sample s = { millis(), voltage, current };
-  bool ok = buffer_push_with_log(s);
-  if (!ok) Serial.println("[BUFFER] overflow!");
-    else Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n", voltage, current, buffer_count());
+    float voltage = (wantV && okV) ? (rawV / gainForRegister(0)) : NAN;
+    float current = (wantI && okI) ? (rawI / gainForRegister(1)) : NAN;
+
+    // If neither channel is enabled, don't push a sample
+    if (wantV || wantI) {
+      Sample s = { millis(), voltage, current };
+      bool ok = buffer_push_with_log(s);
+      if (!ok) {
+        Serial.println("[BUFFER] overflow!");
+      } else {
+        Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n",
+                      voltage, current, buffer_count());
+      }
+    }
   }
 
   unsigned long up_ms = cfg.upload_interval_s * 1000UL;
   if (now - lastUpload >= up_ms){
     lastUpload = now;
-    
+
     // Allocate work buffer on heap to prevent stack overflow
     const size_t workbuf_size = 2048;
     uint8_t* workbuf = (uint8_t*)malloc(workbuf_size);
@@ -54,18 +79,14 @@ void acquireOnce() {
       Serial.println("[ERROR] Failed to allocate work buffer");
       return;
     }
-    
+
     bool ok = finalize_and_upload(DEVICE_ID, (unsigned long)(lastUpload), workbuf, workbuf_size);
     free(workbuf); // Always free the buffer
-    
+
     if (!ok) Serial.println("[UPLOAD] failed");
   }
 
-
-//  if (bufCount % 3 == 0) {
-//    writeSingleRegister(0x0008, 50); // export power 50%
-//    Serial.println("Export power set to 50%");
-//  }
+  // if (bufCount % 3 == 0) { ... }
 }
 
 void checkMemoryHealth() {

@@ -6,8 +6,9 @@
 #include "security.h"
 #include <ArduinoJson.h>
 #include "cloud_sync.h"
+#include "config.h"
 
-#include <base64.h> // if using base64 lib; otherwise implement simple base64
+#include <base64.h>
 
 extern const char* URL_UPLOAD; // define in main
 extern const char* API_KEY_1;
@@ -30,6 +31,11 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
     free(samples); 
     return false; 
   }
+
+  AppConfig cfg = config_get_active();
+  uint8_t mask = cfg.register_mask;
+  bool wantV = (mask & (1 << 0)) != 0;
+  bool wantI = (mask & (1 << 1)) != 0;
 
   // compress into workbuf
   size_t compressed = compress_delta_rle(samples, out_n, workbuf, workcap);
@@ -75,19 +81,26 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   // Limit the number of individual voltage/current samples to prevent overflow
   size_t max_samples = min(out_n, (size_t)50); // Limit to 50 samples max
   
-  body += ",\"voltage\":[";
-  for (size_t i = 0; i < max_samples; i++){
-    body += String(samples[i].voltage / 1.0, 2); // 2 decimal places
-    if (i < max_samples - 1) body += ",";
+  // Conditionally include voltage array
+  if (wantV) {
+    body += ",\"voltage\":[";
+    for (size_t i = 0; i < max_samples; i++) {
+      // When disabled, we never get here, so no NaN prints
+      body += String(samples[i].voltage / 1.0, 2); // 2 decimal places
+      if (i < max_samples - 1) body += ",";
+    }
+    body += "]";
   }
-  body += "]";
 
-  body += ",\"current\":[";
-  for (size_t i = 0; i < max_samples; i++){
-    body += String(samples[i].current / 10.0, 2); // 2 decimal places  
-    if (i < max_samples - 1) body += ",";
+  // Conditionally include current array
+  if (wantI) {
+    body += ",\"current\":[";
+    for (size_t i = 0; i < max_samples; i++) {
+      body += String(samples[i].current / 10.0, 2); // 2 decimal places
+      if (i < max_samples - 1) body += ",";
+    }
+    body += "]";
   }
-  body += "]";
 
   body += "}";
   
