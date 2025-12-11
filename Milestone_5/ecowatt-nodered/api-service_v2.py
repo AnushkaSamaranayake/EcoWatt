@@ -47,6 +47,8 @@ INVERTER_SIM_BASE_URL = "http://20.15.114.131:8080"
 # Store error injection history for UI display (optional)
 ERROR_INJECTION_HISTORY = []
 
+COMMAND_RESULT = defaultdict(list)
+
 def _device_id_from_path(device_id):
     return device_id
 
@@ -280,7 +282,17 @@ def get_commands(device_id):
 def post_command_result(device_id):
     did = _device_id_from_path(device_id)
     print("COMMAND_RESULT", did, request.json)
+
+    # store result for UI
+    COMMAND_RESULT[did].append(request.json)
+    # keep only newest 10
+    COMMAND_RESULT[did] = COMMAND_RESULT[did][-10:]
+
     return jsonify({"ok": True})
+
+@app.route("/debug/command_results/<device_id>", methods=["GET"])
+def debug_cmd_results(device_id):
+    return jsonify(COMMAND_RESULT.get(device_id, []))
 
 # --- Simple push helpers (curl these or wire to your UI) ---
 

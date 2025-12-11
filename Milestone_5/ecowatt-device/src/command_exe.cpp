@@ -66,9 +66,7 @@ void apply_error_injection() {
 
 uint16_t map_register_name_to_addr(const String& reg) {
   if (reg == "export_power") return 8;
-  if (reg == "voltage") return 0;
-  if (reg == "current") return 1;
-  if (reg == "frequency") return 2;
+  if (reg == "status_flag") return 8;
   return 0xFFFF;
 }
 
