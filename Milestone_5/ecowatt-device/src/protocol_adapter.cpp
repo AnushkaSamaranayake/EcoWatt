@@ -89,6 +89,7 @@ bool httpPostFrame(const char* url, const String& hexFrame, String& outFrameHex)
   if (code != 200) { 
     http.end(); 
     fault_log("http_post_fail", (String("code=") + String(code)).c_str());
+    fault_log_recovery("http_post_fail", "protocol_adapter");
     return false; 
   }
 
@@ -97,6 +98,7 @@ bool httpPostFrame(const char* url, const String& hexFrame, String& outFrameHex)
   outFrameHex = extractFrameField(resp);
   if (outFrameHex.length() == 0) {
     fault_log("http_post_no_frame", resp.c_str());
+    fault_log_recovery("malformed_frame", "protocol_adapter");
   }
   return (outFrameHex.length() > 0);
 }
@@ -137,12 +139,16 @@ bool readRegisterU16(uint16_t reg, uint16_t qty, uint16_t& firstVal) {
     if (isModbusException(rx)) {
       uint8_t ex = modbusExceptionCode(rx);
       fault_log("modbus_exception", (String("code=") + String(ex)).c_str());
+      fault_log_recovery("modbus_exception", "protocol_adapter");
       return false;
     }
     Serial.print(F("Read Resp  <- "));
     Serial.println(rx);
     return decodeFirstRegister_U16(rx, firstVal);
   }
+  // After attempts exhausted
+  fault_log("inverter_timeout", "read register failed after retries");
+  fault_log_recovery("inverter_timeout", "protocol_adapter");
   return false;
 }
 

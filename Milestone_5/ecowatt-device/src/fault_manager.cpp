@@ -57,6 +57,29 @@ void fault_persist(){
   // Already appended during logging; this is a noop but kept for API completeness
 }
 
+void fault_log_recovery(const char* code, const char* module) {
+    FaultEvent e;
+    e.ts_ms = millis();
+    e.error_type = ErrorType::NONE;   // Recovery state
+    strncpy(e.code, code, sizeof(e.code)-1);
+    snprintf(e.details, sizeof(e.details), "recovered in %s", module);
+
+    Serial.printf("[RECOVERY] %s : %s\n", code, module);
+
+    size_t idx = (ev_head + ev_count) % (sizeof(events)/sizeof(events[0]));
+    events[idx] = e;
+    if (ev_count < (sizeof(events)/sizeof(events[0]))) ev_count++;
+    else ev_head = (ev_head + 1) % (sizeof(events)/sizeof(events[0]));
+
+    File f = LittleFS.open("/fault_log.txt", "a");
+    if (f) {
+        f.printf("%lu,%s,RECOVERY,%s\n",
+                (unsigned long)e.ts_ms, code, module);
+        f.close();
+    }
+}
+
+
 // ============ Error Classification Helpers ============
 
 ErrorType classify_error(const char* code) {

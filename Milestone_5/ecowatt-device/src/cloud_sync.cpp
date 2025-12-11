@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include "config.h"
 #include "command_exe.h"
+#include "fault_manager.h"
 
 extern const char* API_BASE;  // defined in main.cpp
 
@@ -76,4 +77,26 @@ void cloud_sync_cycle() {
 
     // ======== 3. Apply staged config ========
     config_apply_staged();
+
+    // Log recovery of any previous faults related to config
+    FaultEvent logs[32];
+    size_t n = fault_get_recent(logs, 32);
+
+    DynamicJsonDocument doc(2048);
+    JsonArray arr = doc.createNestedArray("faults");
+
+    for (size_t i=0; i<n; i++) {
+        JsonObject o = arr.createNestedObject();
+        o["timestamp"] = logs[i].ts_ms;
+        o["code"] = logs[i].code;
+        o["details"] = logs[i].details;
+        o["type"] = error_type_to_string(logs[i].error_type);
+    }
+
+    String body;
+    serializeJson(doc, body);
+
+    // POST to cloud
+    http_post_json(String(API_BASE) + "/device/" + device_id + "/fault_logs", body);
+
 }

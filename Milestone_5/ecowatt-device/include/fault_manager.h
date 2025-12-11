@@ -25,6 +25,8 @@ void fault_log(const char* code, const char* details);
 void fault_log_typed(const char* code, const char* details, ErrorType type);
 size_t fault_get_recent(FaultEvent* out, size_t max_items);
 void fault_persist();
+void fault_log_recovery(const char* code, const char* module);
+
 
 // Error detection and classification helpers
 ErrorType classify_error(const char* code);
