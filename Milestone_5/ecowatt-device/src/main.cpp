@@ -23,11 +23,11 @@ const char* API_KEY_1   = "EcowattUploadsMzo11quhRx40l6eqLV22BWvQ5ozk6iolLO60GaO
 
 // Replace with the PSK that matches Flask's API_KEYS
 // const char* DEVICE_PSK = "aa1c38aaa59b94ff2339060e298826e2"; 
-const char* URL_UPLOAD  = "http://10.188.60.251:5000/api/ecowatt/cloud/upload";
+const char* URL_UPLOAD  = "http://10.28.177.230:5000/api/ecowatt/cloud/upload";
 
-const char* API_BASE = "http://10.188.60.251:5000";
+const char* API_BASE = "http://10.28.177.230:5000";
 
-const char* CURRENT_VERSION = "v1.0.0";
+//const char* CURRENT_VERSION = "v1.0.0";
 
 
 void connectWiFi() {
@@ -58,11 +58,11 @@ void setup() {
 
   connectWiFi();
 
-  if (WiFi.status() == WL_CONNECTED) {
-    FOTA::run(API_BASE, storedVersion.c_str());
-  } else {
-    Serial.println("[FOTA] skipped (no WiFi)");
-  }
+  // if (WiFi.status() == WL_CONNECTED) {
+  //   FOTA::run(API_BASE, storedVersion.c_str());
+  // } else {
+  //   Serial.println("[FOTA] skipped (no WiFi)");
+  // }
 
   Serial.println("Setup started");
   buffer_init(256); // capacity (adjust)
