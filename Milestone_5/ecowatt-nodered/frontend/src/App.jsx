@@ -455,7 +455,7 @@ const App = () => {
                         <span className="font-medium">
                           {Array.isArray(device.voltage)
                             ? device.voltage[device.voltage.length - 1]
-                            : device.voltage} V
+                            : device.voltage} V
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -463,7 +463,7 @@ const App = () => {
                         <span className="font-medium">
                           {Array.isArray(device.current)
                           ? device.current[device.current.length - 1]
-                          : device.current} A
+                          : device.current} A
                         </span>
                       </div>
                       <div className="flex justify-between">
