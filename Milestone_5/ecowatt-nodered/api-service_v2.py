@@ -495,18 +495,6 @@ def get_fault_logs(device_id):
 
 #=============== FOTA update endpoint ===============
 
-#simple FOTA upload implementation
-@app.route("/simple_fota", methods=["GET"])
-def simple_fota():
-    if not ACTIVE_PATH:
-        return jsonify({"status": "no_update"}), 204
-
-    return send_file(
-        ACTIVE_PATH,
-        mimetype="application/octet-stream",
-        as_attachment=True
-    )
-
 # Configuration
 UPLOAD_DIR = "./firmware"
 ACTIVE_VERSION = None
@@ -597,6 +585,9 @@ def upload_firmware():
     f.save(save_path)
 
     # Rotate new IV for this version
+    # After saving firmware file
+    ACTIVE_PATH = save_path
+    print("[FOTA_SIMPLE] ACTIVE_PATH set:", ACTIVE_PATH)
     ACTIVE_VERSION = version
     ACTIVE_PATH = save_path
     ACTIVE_IV = secrets.token_bytes(16)
@@ -612,6 +603,19 @@ def upload_firmware():
         "iv": ACTIVE_IV.hex(),
         "total_chunks": TOTAL_CHUNKS
     })
+
+@app.route("/simple_fota", methods=["GET"])
+def simple_fota():
+    global ACTIVE_PATH
+
+    if not ACTIVE_PATH or not os.path.exists(ACTIVE_PATH):
+        return jsonify({"status": "no_update"}), 404
+
+    return send_file(
+        ACTIVE_PATH,
+        mimetype="application/octet-stream",
+        as_attachment=True
+    )
 
 @app.route("/manifest", methods=["GET"])
 def manifest():
