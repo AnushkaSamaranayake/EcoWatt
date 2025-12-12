@@ -107,7 +107,7 @@ void acquireOnce() {
 
   bool ok = buffer_push_with_log(s);
   if (!ok) Serial.println("[BUFFER] overflow!");
-    else Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n", voltage, current, buffer_count());
+    else Serial.printf("[SAMPLE] Voltage=%f Current=%f Frequency=%f Temperature=%f buffer=%d\n", voltage, current, frequency, temperature, buffer_count());
   }
 
   unsigned long up_ms = cfg.upload_interval_s * 1000UL;

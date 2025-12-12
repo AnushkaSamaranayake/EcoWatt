@@ -33,7 +33,12 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   }
 
   // compress into workbuf
-  size_t compressed = compress_delta_rle(samples, out_n, workbuf, workcap);
+  // size_t compressed = compress_delta_rle(samples, out_n, workbuf, workcap);
+  uint8_t mask = config_get_active().register_mask;
+  size_t compressed = compress_delta_rle_v2(
+    samples, out_n, mask, workbuf, workcap
+  );
+
   if (compressed == 0) {
     free(samples);
     // <<< prevent slowly accumulating partial states
@@ -62,11 +67,7 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   for (size_t i=0;i<out_n;i++){ int16_t v=samples[i].voltage; if (v<minV) minV=v; if (v>maxV) maxV=v; sumV+=v; }
   float avgV = sumV / (float)out_n; (void)avgV; // optional: silence unused warning
 
-  uint8_t mask = config_get_active().register_mask;
-
-  size_t compressed = compress_delta_rle_v2(
-    samples, out_n, mask, workbuf, workcap
-  );
+  // uint8_t mask = config_get_active().register_mask;
 
   // Build JSON with size control
   String body = "";
