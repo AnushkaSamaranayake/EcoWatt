@@ -123,3 +123,38 @@ void power_debug_report() {
     Serial.printf("[POWER] WiFiActive=%llu ms\n", wifi_active_time);
     Serial.printf("[POWER] Estimated current draw = %.2f mA\n", power_estimate_current_mA());
 }
+
+PowerStats power_get_stats() {
+  PowerStats s;
+  uint32_t uptime = millis();
+
+  // ---- Time accounting ----
+  s.uptime_ms = uptime;
+  s.cpu80_ms  = cpu80_time;
+  s.cpu160_ms = cpu160_time;
+  s.wifi_active_ms = wifi_active_time;
+
+  float hours = uptime / 3600000.0f;
+
+  // ---- BASELINE (no optimization) ----
+  float baseline_current_mA = 120.0f;
+  s.baseline_mAh = baseline_current_mA * hours;
+
+  // ---- OPTIMIZED ----
+  float cpu_current =
+      (cpu80_time * 55.0f + cpu160_time * 75.0f) / uptime;
+
+  float wifi_current =
+      (wifi_active_time * 120.0f +
+      (uptime - wifi_active_time) * 20.0f) / uptime;
+
+  float optimized_current = cpu_current + wifi_current;
+  s.optimized_mAh = optimized_current * hours;
+
+  // ---- SAVINGS ----
+  s.saved_mAh = s.baseline_mAh - s.optimized_mAh;
+  s.saved_percent = (s.saved_mAh / s.baseline_mAh) * 100.0f;
+
+  return s;
+}
+

@@ -30,6 +30,8 @@ const char* API_BASE = "http://10.28.177.230:5000";
 
 //const char* CURRENT_VERSION = "v1.0.0";
 
+static uint32_t lastPowerPrint = 0;
+
 
 void connectWiFi() {
   Serial.printf("Connecting to %s...\n", WIFI_SSID);
@@ -77,4 +79,19 @@ void loop() {
   schedulerLoop();
   // cooperative idle hint to reduce active CPU frequency briefly
   power_idle_sleep_hint_ms(50);
+
+  if (millis() - lastPowerPrint > 60000) { // every 1 min
+    PowerStats p = power_get_stats();
+
+    Serial.println("===== POWER REPORT =====");
+    Serial.printf("Uptime: %.2f min\n", p.uptime_ms / 60000.0);
+    Serial.printf("Baseline Energy: %.3f mAh\n", p.baseline_mAh);
+    Serial.printf("Optimized Energy: %.3f mAh\n", p.optimized_mAh);
+    Serial.printf("Energy Saved: %.3f mAh\n", p.saved_mAh);
+    Serial.printf("Power Saved: %.2f %%\n", p.saved_percent);
+    Serial.println("========================");
+
+    lastPowerPrint = millis();
+}
+
 }
