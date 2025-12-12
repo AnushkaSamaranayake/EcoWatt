@@ -41,17 +41,17 @@ const App = () => {
     'Basic Config': {
       sampling_interval: 60,
       registers: [
-        { address: '0x01', type: 'input', name: 'voltage' },
-        { address: '0x02', type: 'input', name: 'current' }
+        { address: '0x00', type: 'input', name: 'voltage' },
+        { address: '0x01', type: 'input', name: 'current' }
       ]
     },
     'Extended Config': {
       sampling_interval: 30,
       registers: [
-        { address: '0x01', type: 'input', name: 'voltage' },
-        { address: '0x02', type: 'input', name: 'current' },
-        { address: '0x03', type: 'holding', name: 'power_limit' },
-        { address: '0x04', type: 'input', name: 'temperature' }
+        { address: '0x00', type: 'input', name: 'voltage' },
+        { address: '0x01', type: 'input', name: 'current' },
+        { address: '0x02', type: 'input', name: 'frequency' },
+        { address: '0x07', type: 'input', name: 'temperature' }
       ]
     }
   }
@@ -78,6 +78,8 @@ const App = () => {
             timestamp: new Date().toISOString(),
             voltage: 230.5,
             current: 15.2,
+            frequency: 50.0,
+            temperature: 45.3,
             power: 3503.6,
             status: 'Online'
           },
@@ -469,6 +471,22 @@ const App = () => {
                       <div className="flex justify-between">
                         <span>Power:</span>
                         <span className="font-medium">{device.power} W</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Frequency:</span>
+                        <span className="font-medium">
+                          {Array.isArray(device.frequency)
+                            ? device.frequency[device.frequency.length - 1]
+                            : device.frequency} Hz
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Temperature:</span>
+                        <span className="font-medium">
+                          {Array.isArray(device.temperature)
+                          ? device.temperature[device.temperature.length - 1]
+                          : device.temperature} °C
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Status:</span>
