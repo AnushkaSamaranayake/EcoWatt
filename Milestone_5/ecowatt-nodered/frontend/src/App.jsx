@@ -477,7 +477,7 @@ const App = () => {
                         <span className="font-medium">
                           {Array.isArray(device.frequency)
                             ? device.frequency[device.frequency.length - 1]
-                            : device.frequency} Hz
+                            : device.frequency} Hz
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -485,7 +485,7 @@ const App = () => {
                         <span className="font-medium">
                           {Array.isArray(device.temperature)
                           ? device.temperature[device.temperature.length - 1]
-                          : device.temperature} °C
+                          : device.temperature} °C
                         </span>
                       </div>
                       <div className="flex justify-between">
