@@ -7,6 +7,8 @@ struct Sample {
   unsigned long ts;
   float voltage;
   float current;
+  float frequency;
+  float temperature;
 };
 
 

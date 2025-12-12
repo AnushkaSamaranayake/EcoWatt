@@ -39,30 +39,72 @@ void acquireOnce() {
     //float current = okI ? rawI / gainForRegister(1) : NAN;
     float voltage = NAN;
     float current = NAN;
+    float frequency = NAN;
+    float temperature = NAN;
 
-    // --- Voltage (register 0x0000) ---
-    if (should_read_voltage()) {
-      uint16_t rawV = 0;
-      bool okV = readRegisterU16(0x0000, 0x0001, rawV);
-      if (okV) {
-        voltage = rawV / gainForRegister(0);
-      } else {
-        voltage = NAN;
-      }
-    }
+  //   // --- Voltage (register 0x0000) ---
+  //   if (should_read_voltage()) {
+  //     uint16_t rawV = 0;
+  //     bool okV = readRegisterU16(0x0000, 0x0001, rawV);
+  //     if (okV) {
+  //       voltage = rawV / gainForRegister(0);
+  //     } else {
+  //       voltage = NAN;
+  //     }
+  //   }
 
-    // --- Current (register 0x0001) ---
-    if (should_read_current()) {
-      uint16_t rawI = 0;
-      bool okI = readRegisterU16(0x0001, 0x0001, rawI);
-      if (okI) {
-        current = rawI / gainForRegister(1);
-      } else {
-        current = NAN;
-      }
-    }
+  //   // --- Current (register 0x0001) ---
+  //   if (should_read_current()) {
+  //     uint16_t rawI = 0;
+  //     bool okI = readRegisterU16(0x0001, 0x0001, rawI);
+  //     if (okI) {
+  //       current = rawI / gainForRegister(1);
+  //     } else {
+  //       current = NAN;
+  //     }
+  //   }
     
-  Sample s = { millis(), voltage, current };
+  // Sample s = { millis(), voltage, current };
+
+  // Voltage (0)
+  if (should_read_voltage()) {
+    uint16_t rv;
+    if (readRegisterU16(0x0000, 1, rv))
+      voltage = rv / 10.0f;
+  }
+
+  // Current (1)
+  if (should_read_current()) {
+    uint16_t ri;
+    if (readRegisterU16(0x0001, 1, ri))
+      current = ri / 10.0f;
+  }
+
+  // Frequency (2)
+  if (should_read_frequency()) {
+    uint16_t rf;
+    if (readRegisterU16(0x0002, 1, rf))
+      frequency = rf / 100.0f;
+  }
+
+  // Temperature (7)
+  if (should_read_temperature()) {
+    uint16_t rt;
+    if (readRegisterU16(0x0007, 1, rt))
+      temperature = rt / 10.0f;
+  }
+
+  Sample s = {
+    millis(),
+    voltage,
+    current,
+    frequency,
+    temperature
+  };
+
+  buffer_push_with_log(s);
+  
+
   bool ok = buffer_push_with_log(s);
   if (!ok) Serial.println("[BUFFER] overflow!");
     else Serial.printf("[SAMPLE] Voltage=%f Current=%f buffer=%d\n", voltage, current, buffer_count());
