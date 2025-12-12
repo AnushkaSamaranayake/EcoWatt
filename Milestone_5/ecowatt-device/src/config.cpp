@@ -28,6 +28,11 @@ void config_init(){
     EEPROM.put(CFG_ADDR, active_cfg);
     EEPROM.commit();
   }
+  // active_cfg = default_cfg();
+  // EEPROM.put(CFG_ADDR, active_cfg);
+  // EEPROM.commit();
+  // Serial.println("[CFG] EEPROM RESET TO DEFAULT");
+
   has_staged = false;
 }
 

@@ -62,6 +62,7 @@ void fault_log_typed(const char* code, const char* details, ErrorType type){
              error_type_to_string(type), e.details);
     f.close();
   }
+  delay(1500); // ensure serial output completes
 }
 
 size_t fault_get_recent(FaultEvent* out, size_t max_items){
