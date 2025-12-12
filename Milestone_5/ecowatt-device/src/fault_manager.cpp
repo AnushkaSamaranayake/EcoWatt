@@ -12,6 +12,21 @@ void fault_init(){
   }
 }
 
+static void print_fault_banner() {
+  Serial.println();
+  Serial.println(F("==================================="));
+  Serial.println(F("FAULT EVENT DETECTED"));
+  Serial.println(F("==================================="));
+}
+
+static void print_recovery_banner() {
+  Serial.println();
+  Serial.println(F("==================================="));
+  Serial.println(F("RECOVERY EVENT"));
+  Serial.println(F("==================================="));
+}
+
+
 void fault_log(const char* code, const char* details){
   // Use new typed version with automatic classification
   ErrorType type = classify_error(code);
@@ -26,8 +41,13 @@ void fault_log_typed(const char* code, const char* details, ErrorType type){
   strncpy(e.code, code, sizeof(e.code)-1); e.code[sizeof(e.code)-1]=0;
   strncpy(e.details, details, sizeof(e.details)-1); e.details[sizeof(e.details)-1]=0;
 
-  // Log to serial with error type
-  Serial.printf("[FAULT] %s (%s): %s\n", e.code, error_type_to_string(type), e.details);
+  // ---- SERIAL MONITOR OUTPUT ----
+  print_fault_banner();
+  Serial.printf("Time (ms)  : %lu\n", (unsigned long)e.ts_ms);
+  Serial.printf("Error Code : %s\n", e.code);
+  Serial.printf("Type       : %s\n", error_type_to_string(type));
+  Serial.printf("Details    : %s\n", e.details);
+  Serial.println(F("==================================="));
 
   // store in circular buffer
   size_t idx = (ev_head + ev_count) % (sizeof(events)/sizeof(events[0]));
@@ -64,7 +84,14 @@ void fault_log_recovery(const char* code, const char* module) {
     strncpy(e.code, code, sizeof(e.code)-1);
     snprintf(e.details, sizeof(e.details), "recovered in %s", module);
 
-    Serial.printf("[RECOVERY] %s : %s\n", code, module);
+    print_recovery_banner();
+
+    Serial.printf("Time (ms)  : %lu\n", (unsigned long)e.ts_ms);
+    Serial.printf("Recovered  : %s\n", e.code);
+    Serial.printf("Module     : %s\n", module);
+
+    Serial.println(F("==================================="));
+
 
     size_t idx = (ev_head + ev_count) % (sizeof(events)/sizeof(events[0]));
     events[idx] = e;
