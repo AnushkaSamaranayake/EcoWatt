@@ -101,7 +101,25 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
         if (i < max_samples - 1) body += ",";
     }
   }
-  
+
+  body += "]";
+
+  body += ",\"frequency\":[";
+  if (should_read_frequency()) {
+    for (size_t i = 0; i < max_samples; i++) {
+      body += String(samples[i].frequency, 2);
+      if (i < max_samples - 1) body += ",";
+    }
+  }
+  body += "]";
+
+  body += ",\"temperature\":[";
+  if (should_read_temperature()) {
+    for (size_t i = 0; i < max_samples; i++) {
+      body += String(samples[i].temperature, 2);
+      if (i < max_samples - 1) body += ",";
+    }
+  }
   body += "]";
 
   body += "}";
