@@ -416,19 +416,16 @@ def add_error_flag():
         
         if response.status_code == 200:
             return jsonify({
+                "status": "error",
                 "status": "success",
-                "message": f"InverterSim will send {error_type} error frame to device {device_id}",
+                "message": f"Error flag '{error_type}' injected for device {device_id}",
                 "device_id": device_id,
                 "errorType": error_type,
-                "inverter_sim_response": response.json() if response.content else None
-            }), 200
-        else:
-            return jsonify({
-                "status": "error",
-                "message": "InverterSim returned error",
+                "exceptionCode": data.get("exceptionCode", 0),
+                "delayMs": data.get("delayMs", 0),
                 "inverter_sim_status": response.status_code,
                 "inverter_sim_response": response.text
-            }), 502
+            }), 200
             
     except requests.exceptions.Timeout:
         return jsonify({
