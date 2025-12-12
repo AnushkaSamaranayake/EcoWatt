@@ -42,7 +42,15 @@ void run(const char* apiBase) {
   }
 
   WiFiClient* stream = http.getStreamPtr();
-  size_t written = Update.writeStream(*stream);
+
+if (!stream || !stream->available()) {
+  Serial.println("[FOTA_SIMPLE] Stream not available");
+  Update.end(false);
+  http.end();
+  return;
+}
+
+size_t written = Update.writeStream(*stream);
 
   if (written != contentLength) {
     Serial.printf("[FOTA_SIMPLE] Write failed (%d/%d)\n",

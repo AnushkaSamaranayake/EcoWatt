@@ -114,12 +114,16 @@ def inject_sample_data():
         # Generate random but realistic values
         voltage = round(220 + random.uniform(-10, 10), 2)
         current = round(10 + random.uniform(-5, 5), 2)
+        frequencys = round(50 + random.uniform(-1, 1), 2)
+        temperatures = round(25 + random.uniform(-5, 5), 2)
         
         data_point = {
             "device_id": device,
             "timestamp": datetime.now().isoformat(),
             "voltage": voltage,
             "current": current,
+            "frequency": frequencys,
+            "temperature": temperatures,
             "power": round(voltage * current, 2),
             "sample_count": random.randint(50, 100),
             "payload_format": "json",
@@ -196,9 +200,11 @@ def uploadData():
 
         voltages = data.get("voltage", [])
         currents = data.get("current", [])
+        frequencys = data.get("frequency", [])
+        temperatures = data.get("temperature", [])
 
         # Allow either arrays OR single numbers
-        if isinstance(voltages, list) and isinstance(currents, list) and voltages and currents:
+        if isinstance(voltages, list) and isinstance(currents, list) and voltages and currents and frequencys and temperatures:
             # Average instantaneous power across samples
             power = sum(v * c for v, c in zip(voltages, currents)) / len(voltages)
         else:
@@ -206,6 +212,8 @@ def uploadData():
             try:
                 v = float(voltages if isinstance(voltages, (int, float)) else 0.0)
                 c = float(currents if isinstance(currents, (int, float)) else 0.0)
+                f = float(frequencys if isinstance(frequencys, (int, float)) else 0.0)
+                t = float(temperatures if isinstance(temperatures, (int, float)) else 0.0)
                 power = v * c
             except Exception:
                 power = 0.0
@@ -218,6 +226,8 @@ def uploadData():
             "payload": data.get("payload"),
             "voltage": voltages,
             "current": currents,
+            "frequency": frequencys,
+            "temperature": temperatures,
             "power": round(power, 3),
             "status": "Online",
         }
@@ -311,7 +321,8 @@ def push_config(device_id):
     register_map = {
         0: "voltage",
         1: "current",
-        2: "frequency"
+        2: "frequency",
+        7: "temperature",
     }
 
     reg_in = cfg.get("registers", [])

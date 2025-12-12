@@ -62,6 +62,12 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   for (size_t i=0;i<out_n;i++){ int16_t v=samples[i].voltage; if (v<minV) minV=v; if (v>maxV) maxV=v; sumV+=v; }
   float avgV = sumV / (float)out_n; (void)avgV; // optional: silence unused warning
 
+  uint8_t mask = config_get_active().register_mask;
+
+  size_t compressed = compress_delta_rle_v2(
+    samples, out_n, mask, workbuf, workcap
+  );
+
   // Build JSON with size control
   String body = "";
   body.reserve(2048); // Pre-allocate reasonable amount
@@ -70,7 +76,9 @@ bool finalize_and_upload(const char* device_id, unsigned long interval_start_ms,
   body += "\"device_id\":\"" + String(device_id) + "\"";
   body += ",\"interval_start\":" + String(interval_start_ms);
   body += ",\"sample_count\":" + String(out_n);
-  body += ",\"payload_format\":\"DELTA_RLE_v1\"";
+  // body += ",\"payload_format\":\"DELTA_RLE_v1\"";
+  body += ",\"payload_format\":\"DELTA_RLE_v2\"";
+  body += ",\"channel_mask\":" + String(mask);
   body += ",\"payload\":\"" + base64payload + "\"";
 
   // Limit the number of individual voltage/current samples to prevent overflow

@@ -82,3 +82,45 @@ size_t compress_delta_rle(const Sample* samples, size_t n, uint8_t* out_buf, siz
 
     return pos; // total compressed size
 }
+
+size_t compress_delta_rle_v2(
+  const Sample* s,
+  size_t n,
+  uint8_t mask,
+  uint8_t* out,
+  size_t cap
+) {
+  if (!s || n == 0 || cap < 8) return 0;
+  size_t pos = 0;
+
+  // Header
+  out[pos++] = 'D'; out[pos++] = 'R';
+  out[pos++] = 'L'; out[pos++] = '2';
+  out[pos++] = mask;
+  out[pos++] = (n >> 8) & 0xFF;
+  out[pos++] = n & 0xFF;
+
+  auto encode = [&](auto getter) {
+    int16_t prev = getter(s[0]);
+    out[pos++] = prev >> 8;
+    out[pos++] = prev & 0xFF;
+    for (size_t i = 1; i < n; i++) {
+      int d = getter(s[i]) - prev;
+      prev += d;
+      if (d >= -127 && d <= 127) {
+        out[pos++] = (int8_t)d;
+      } else {
+        out[pos++] = 0x7F;
+        out[pos++] = d >> 8;
+        out[pos++] = d & 0xFF;
+      }
+    }
+  };
+
+  if (mask & (1<<0)) encode([](const Sample& x){ return (int16_t)(x.voltage*10); });
+  if (mask & (1<<1)) encode([](const Sample& x){ return (int16_t)(x.current*10); });
+  if (mask & (1<<2)) encode([](const Sample& x){ return (int16_t)(x.frequency*100); });
+  if (mask & (1<<3)) encode([](const Sample& x){ return (int16_t)(x.temperature*10); });
+
+  return pos;
+}

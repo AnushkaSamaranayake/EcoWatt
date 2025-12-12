@@ -11,3 +11,4 @@
 bool should_read_voltage();
 bool should_read_current();
 bool should_read_frequency();
+bool should_read_temperature();

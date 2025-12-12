@@ -82,6 +82,7 @@ bool config_stage_from_json(const String& json, String& accepted_json, String& r
       if (r == "voltage")   mask |= (1 << 0);
       if (r == "current")   mask |= (1 << 1);
       if (r == "frequency") mask |= (1 << 2);
+      if (r == "temperature") mask |= (1 << 3);
     }
     staged_cfg.register_mask = mask;
     changed = true;
