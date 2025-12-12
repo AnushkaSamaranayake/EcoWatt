@@ -108,7 +108,7 @@ def inject_sample_data():
     """Inject sample data for testing (development only)"""
     import random
     
-    devices = ['EcoWatt001', 'EcoWatt002', 'EcoWatt003', 'EcoWatt004', 'EcoWatt005']
+    devices = ['EcoWatt001']
     
     for device in devices:
         # Generate random but realistic values
