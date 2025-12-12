@@ -414,18 +414,16 @@ def add_error_flag():
         if len(ERROR_INJECTION_HISTORY) > 100:
             ERROR_INJECTION_HISTORY.pop(0)
         
-        if response.status_code == 200:
-            return jsonify({
-                "status": "error",
-                "status": "success",
-                "message": f"Error flag '{error_type}' injected for device {device_id}",
-                "device_id": device_id,
-                "errorType": error_type,
-                "exceptionCode": data.get("exceptionCode", 0),
-                "delayMs": data.get("delayMs", 0),
-                "inverter_sim_status": response.status_code,
-                "inverter_sim_response": response.text
-            }), 200
+        return jsonify({
+            "status": "success",
+            "message": f"Error flag '{error_type}' injected for device {device_id}",
+            "device_id": device_id,
+            "errorType": error_type,
+            "exceptionCode": data.get("exceptionCode", 0),
+            "delayMs": data.get("delayMs", 0),
+            "inverter_sim_status": response.status_code,
+            "inverter_sim_response": response.text
+        }), 200
             
     except requests.exceptions.Timeout:
         return jsonify({
