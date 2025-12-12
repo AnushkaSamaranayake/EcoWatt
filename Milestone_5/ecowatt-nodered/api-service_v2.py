@@ -7,6 +7,7 @@ from typing import Tuple
 from collections import defaultdict
 import time
 from datetime import datetime
+from flask import send_file
 
 #Load environment variables from .env file
 load_dotenv()
@@ -493,6 +494,18 @@ def get_fault_logs(device_id):
     })
 
 #=============== FOTA update endpoint ===============
+
+#simple FOTA upload implementation
+@app.route("/simple_fota", methods=["GET"])
+def simple_fota():
+    if not ACTIVE_PATH:
+        return jsonify({"status": "no_update"}), 204
+
+    return send_file(
+        ACTIVE_PATH,
+        mimetype="application/octet-stream",
+        as_attachment=True
+    )
 
 # Configuration
 UPLOAD_DIR = "./firmware"

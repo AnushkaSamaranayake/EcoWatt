@@ -11,6 +11,9 @@
 #include "power_manager.h"
 #include "fault_manager.h"
 #include "config.h"
+#include "fota_simple.h"
+
+#define USE_SIMPLE_FOTA 1
 
 const char* WIFI_SSID     = "Anushka's Galaxy M12";
 const char* WIFI_PASSWORD = "12345678";
@@ -61,6 +64,12 @@ void setup() {
   }
 
   connectWiFi();
+
+  #if USE_SIMPLE_FOTA
+    FOTA_SIMPLE::run(API_BASE);
+  #else
+    FOTA::run(API_BASE, storedVersion.c_str());
+  #endif
 
   // if (WiFi.status() == WL_CONNECTED) {
   //   FOTA::run(API_BASE, storedVersion.c_str());
